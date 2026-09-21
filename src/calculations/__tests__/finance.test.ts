@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cagr,
   compound,
   divide,
   irr,
@@ -8,7 +7,6 @@ import {
   payment,
   signChanges,
   sumOptional,
-  sumStrict,
 } from '../finance';
 
 describe('npv', () => {
@@ -107,20 +105,17 @@ describe('payment', () => {
   });
 });
 
-describe('compound / cagr', () => {
-  it('round-trips: cagr inverts compound', () => {
-    const end = compound(100, 0.07, 10) as number;
-    expect(cagr(100, end, 10)).toBeCloseTo(0.07, 10);
+describe('compound', () => {
+  it('compounds a positive rate', () => {
+    expect(compound(100, 0.07, 10)).toBeCloseTo(196.715, 3);
   });
 
   it('handles negative growth', () => {
     expect(compound(100, -0.1, 2)).toBeCloseTo(81, 10);
   });
 
-  it('refuses a non-positive base', () => {
-    expect(cagr(0, 100, 5)).toBeNull();
-    expect(cagr(100, 0, 5)).toBeNull();
-    expect(cagr(100, 200, 0)).toBeNull();
+  it('is the identity at zero years', () => {
+    expect(compound(100, 0.07, 0)).toBeCloseTo(100, 10);
   });
 });
 
@@ -132,9 +127,8 @@ describe('divide and sums', () => {
     expect(divide(10, 4)).toBe(2.5);
   });
 
-  it('sumStrict propagates missing values, sumOptional skips them', () => {
-    expect(sumStrict([1, 2, 3])).toBe(6);
-    expect(sumStrict([1, null, 3])).toBeNull();
+  it('sumOptional treats a missing component as no cost', () => {
+    expect(sumOptional([1, 2, 3])).toBe(6);
     expect(sumOptional([1, null, 3, undefined])).toBe(4);
   });
 });

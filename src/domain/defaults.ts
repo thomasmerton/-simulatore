@@ -10,14 +10,8 @@
  * and are reported as MISSING rather than filled with a plausible number.
  */
 
-import type {
-  IncomeTaxAssumptions,
-  Portfolio,
-  PropertyInputs,
-  ScenarioShocks,
-} from './types';
+import type { Portfolio, PropertyInputs } from './types';
 import type { ProvenanceMap } from './provenance';
-import { NO_SHOCKS } from '@/calculations/scenario';
 
 export const DEFAULT_CURRENCY = 'EUR';
 
@@ -161,12 +155,6 @@ export function starterProvenance(): ProvenanceMap {
   };
 }
 
-export const DEFAULT_INCOME_TAX: IncomeTaxAssumptions = {
-  mode: 'NONE',
-  rate: 0.21,
-  interestDeductible: false,
-};
-
 export function emptyPortfolio(id: string): Portfolio {
   const now = new Date().toISOString();
   return {
@@ -177,8 +165,4 @@ export function emptyPortfolio(id: string): Portfolio {
     updatedAt: now,
     assets: [],
   };
-}
-
-export function emptyShocks(): ScenarioShocks {
-  return { ...NO_SHOCKS };
 }

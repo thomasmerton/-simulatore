@@ -155,33 +155,12 @@ export function compound(present: number, rate: number, years: number): number |
   return present * Math.pow(1 + rate, years);
 }
 
-/**
- * Compound annual growth rate implied by a start and end value.
- *   CAGR = (end / start)^(1/years) - 1
- * Undefined for a non-positive start value or a non-positive end value.
- */
-export function cagr(start: number, end: number, years: number): number | null {
-  if (!isFiniteNumber(start) || !isFiniteNumber(end) || !isFiniteNumber(years)) return null;
-  if (start <= 0 || end <= 0 || years <= 0) return null;
-  return Math.pow(end / start, 1 / years) - 1;
-}
-
 /** Safe division: null instead of Infinity/NaN when the denominator is unusable. */
 export function divide(numerator: number | null, denominator: number | null): number | null {
   if (!isFiniteNumber(numerator) || !isFiniteNumber(denominator)) return null;
   if (denominator === 0) return null;
   const result = numerator / denominator;
   return isFiniteNumber(result) ? result : null;
-}
-
-/** Sum that propagates null: any missing component makes the total unknown. */
-export function sumStrict(values: readonly (number | null)[]): number | null {
-  let total = 0;
-  for (const v of values) {
-    if (!isFiniteNumber(v)) return null;
-    total += v;
-  }
-  return total;
 }
 
 /** Sum treating null as zero. Use only where absence genuinely means "no cost". */

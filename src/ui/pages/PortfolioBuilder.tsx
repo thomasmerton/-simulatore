@@ -20,6 +20,7 @@ import {
   parseNumber,
   parsePercent,
   percentToInput,
+  roundMoney,
 } from '../format';
 
 const ASSET_CLASSES: AssetClass[] = ['REAL_ESTATE', 'EQUITIES', 'BONDS', 'CASH', 'OTHER'];
@@ -362,8 +363,8 @@ export function PortfolioBuilder() {
                   addPortfolioAsset({
                     label: property.name,
                     assetClass: 'REAL_ESTATE',
-                    amount: price * (1 - ltv),
-                    debt: price * ltv,
+                    amount: roundMoney(price * (1 - ltv)),
+                    debt: roundMoney(price * ltv),
                     liquid: false,
                     geography: property.inputs.facts.city,
                     propertyId: property.id,

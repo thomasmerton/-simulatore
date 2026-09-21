@@ -8,6 +8,7 @@ import {
   parseNumber,
   parsePercent,
   percentToInput,
+  roundMoney,
 } from '@/ui/format';
 
 describe('formatting never disguises a missing value as zero', () => {
@@ -53,5 +54,18 @@ describe('parsing', () => {
     expect(parsePercent('5.5')).toBeCloseTo(0.055, 10);
     expect(percentToInput(0.07)).toBe('7');
     expect(percentToInput(parsePercent('3.75'))).toBe('3.75');
+  });
+});
+
+describe('roundMoney', () => {
+  it('removes binary float artefacts from derived amounts', () => {
+    // 180000 * 0.7 is 125999.99999999999 in IEEE 754.
+    expect(roundMoney(180_000 * 0.7)).toBe(126_000);
+    expect(roundMoney(180_000 * (1 - 0.7))).toBe(54_000);
+  });
+
+  it('keeps genuine cents', () => {
+    expect(roundMoney(1234.567)).toBe(1234.57);
+    expect(roundMoney(-0.005)).toBe(-0);
   });
 });

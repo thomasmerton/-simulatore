@@ -94,6 +94,17 @@ export function formatValue(
   }
 }
 
+/**
+ * Round a derived amount to whole currency cents.
+ *
+ * Products like `price * (1 - ltv)` land on binary-float artefacts
+ * (180000 * 0.7 = 125999.99999999999), which then appear verbatim in a number
+ * input. Any amount computed rather than typed goes through here.
+ */
+export function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /** Parse a user-typed string into a number, treating blank as "not provided". */
 export function parseNumber(input: string): number | null {
   const trimmed = input.trim().replace(/\s/g, '').replace(',', '.');

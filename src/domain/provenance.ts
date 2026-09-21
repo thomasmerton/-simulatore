@@ -79,15 +79,3 @@ export function weakestProvenance(map: ProvenanceMap, paths: readonly string[]):
   return worst;
 }
 
-/** Paths whose provenance is at or below (weaker than) the given level. */
-export function pathsAtOrWeakerThan(
-  map: ProvenanceMap,
-  paths: readonly string[],
-  level: Provenance,
-): string[] {
-  return paths.filter((p) => RANK[map[p] ?? 'MISSING'] >= RANK[level]);
-}
-
-export function isWeaker(a: Provenance, b: Provenance): boolean {
-  return RANK[a] > RANK[b];
-}
