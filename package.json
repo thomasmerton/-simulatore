@@ -1,0 +1,31 @@
+{
+  "name": "real-estate-investment-analyzer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Decision-support system for real estate investment analysis. Produces economics, scenarios and risk metrics - never recommendations.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}
