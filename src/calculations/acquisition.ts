@@ -18,8 +18,17 @@ export interface AcquisitionResult {
   purchaseTax: number | null;
   agencyCommission: number | null;
   notaryFees: number;
+  legalFees: number;
+  /** Arrangement, survey and mortgage-registration fees. */
+  financingFees: number;
   /** Renovation + furniture. Capitalised into the asset basis. */
   capexAtPurchase: number;
+  /**
+   * Working capital committed at purchase. Part of the cash the investor puts
+   * in, so it belongs in the acquisition total — but it is not consumed, so
+   * the projection returns it at exit.
+   */
+  initialReserves: number;
   otherUpfrontCosts: number;
   /** All one-off costs excluding the purchase price itself. */
   totalTransactionCosts: number | null;
@@ -71,15 +80,28 @@ export function calculateAcquisitionCost(
   );
 
   const notaryFees = isFiniteNumber(costs.notaryFees) ? costs.notaryFees : 0;
+  const legalFees = isFiniteNumber(costs.legalFees) ? costs.legalFees : 0;
+  const financingFees = isFiniteNumber(costs.financingFees) ? costs.financingFees : 0;
   const renovation = isFiniteNumber(costs.renovationCost) ? costs.renovationCost : 0;
   const furniture = isFiniteNumber(costs.furnitureCost) ? costs.furnitureCost : 0;
+  const initialReserves = isFiniteNumber(costs.initialReserves) ? costs.initialReserves : 0;
   const other = isFiniteNumber(costs.otherUpfrontCosts) ? costs.otherUpfrontCosts : 0;
   const capexAtPurchase = renovation + furniture;
 
+  // A percentage cost with no basis makes the whole total unknown: reporting
+  // a total that silently omits one line is worse than reporting none.
   const transactionCostParts = [purchaseTax, agencyCommission];
   const totalTransactionCosts = transactionCostParts.some((p) => !isFiniteNumber(p))
     ? null
-    : sumOptional([...transactionCostParts, notaryFees, capexAtPurchase, other]);
+    : sumOptional([
+        ...transactionCostParts,
+        notaryFees,
+        legalFees,
+        financingFees,
+        capexAtPurchase,
+        initialReserves,
+        other,
+      ]);
 
   const totalAcquisitionCost =
     isFiniteNumber(purchasePrice) && isFiniteNumber(totalTransactionCosts)
@@ -93,9 +115,12 @@ export function calculateAcquisitionCost(
   push('purchasePrice', 'Purchase price', purchasePrice);
   push('purchaseTax', 'Purchase tax', purchaseTax);
   push('notaryFees', 'Notary fees', notaryFees);
+  push('legalFees', 'Legal fees', legalFees);
   push('agencyCommission', 'Agency commission', agencyCommission);
+  push('financingFees', 'Financing fees', financingFees);
   push('renovation', 'Renovation', renovation);
   push('furniture', 'Furniture', furniture);
+  push('initialReserves', 'Initial reserves', initialReserves);
   push('other', 'Other upfront costs', other);
 
   return {
@@ -104,7 +129,10 @@ export function calculateAcquisitionCost(
     purchaseTax,
     agencyCommission,
     notaryFees,
+    legalFees,
+    financingFees,
     capexAtPurchase,
+    initialReserves,
     otherUpfrontCosts: other,
     totalTransactionCosts,
     totalAcquisitionCost,

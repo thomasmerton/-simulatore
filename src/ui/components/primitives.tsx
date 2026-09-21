@@ -45,7 +45,12 @@ export function Card({
               </p>
             )}
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          {/* Must be allowed to shrink and wrap: `shrink-0` here stopped a row
+              of pills from ever wrapping, which pushed the whole page wide on
+              a phone. */}
+          {actions && (
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{actions}</div>
+          )}
         </header>
       )}
       <div className="px-4 py-4 sm:px-5">{children}</div>

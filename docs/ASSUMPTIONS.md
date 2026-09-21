@@ -11,20 +11,69 @@ faced with thirty empty fields.
 
 | Field | Default | Note |
 |-------|---------|------|
-| Purchase tax | 9% | Italian registration tax on a second home. Wrong for a first home, for new-build (VAT), and for every other country. |
 | Notary fees | €2,500 | Order of magnitude only. |
-| Agency commission | 3% | Common in Italy; varies widely. |
 | Vacancy | 30 days/yr | ≈8% of the year. Not market-derived. |
 | Rent growth | 1%/yr | Arbitrary. Not a forecast. |
 | Cost inflation | 2%/yr | Arbitrary. Not a forecast. |
 | LTV / rate / term | 70% / 3.5% / 25y | Illustrative financing, not a quote. |
 | Price growth | 0% | Deliberately zero: the tool will not guess capital appreciation, which is the single most influential input. |
-| Selling costs | 3% | |
-| Capital gains tax | 26%, exempt after 5 years | Italian *plusvalenza* rules for non-primary residences. |
 | Discount rate | 5% | The investor's required return. Genuinely personal. |
+
+Purchase tax, agency commission, selling costs and capital gains tax are **no
+longer silent defaults**. They come from a `TaxProfile`, so they carry a
+country, an investor type, a transaction type, a source, an effective date and
+a `verified` flag. The profile that ships (Italy, second home, private
+individual) is **unverified** and everything derived from it is flagged as a
+model assumption.
 
 Fields that cannot be guessed at all — **price, surface, rent** — default to
 `null` and report as `MISSING`.
+
+## Limitations
+
+Read this section before relying on any output.
+
+### Structural
+
+- **Annual periods, year-end convention.** Mortgage interest accrues monthly,
+  but cash flows are discounted annually. Rent seasonality, mid-year purchases
+  and monthly discounting are not modelled.
+- **Nominal only.** All figures are money of the day. IRR and NPV are nominal;
+  compare them against a nominal required return. The unit system *knows* about
+  real vs nominal and refuses to convert between them, but the projection does
+  not produce a real-terms view.
+- **One unit, one loan, one currency per property.** No multi-unit rent rolls,
+  no second charge, no refinancing mid-hold (a maturity before the end of the
+  amortisation is modelled as a refinance **on the same terms**, which is
+  stated as a warning, not hidden).
+- **Capex is a smooth annual reserve**, not lumpy real works. Real capex lands
+  in a single year and hurts IRR more than a level provision suggests.
+- **Renovation is paid entirely at t=0** and capitalised in full. No staged
+  payments, no interest on a works facility.
+
+### Data
+
+- **No real market feed is connected.** Everything on the Markets tab is user
+  entry or the clearly-badged example dataset.
+- **No FX.** A comparison spanning currencies warns and does not convert.
+- **No price index**, so nominal figures cannot be restated in real terms.
+- **Derived gross yield** is a ratio of two averages, which is not the average
+  of the ratio. It is flagged `DERIVED_DATA` for that reason.
+
+### Tax
+
+- **Tax is an input, not encoded law.** Rates, modes and exemption periods are
+  user-editable and carry a `verified` flag. Loss carry-forward is not
+  modelled. Depreciation and amortisation of works are not modelled.
+- **This tool is not tax advice.**
+
+### Portfolio
+
+- **Non-property assets are modelled by yield and growth assumptions only.**
+  There is no volatility model and no correlation between assets, so the
+  portfolio downside is a simultaneous-shock scenario, not a risk model.
+- **Expected income is left blank** unless every asset carries an assumption —
+  a partial total would understate it while looking complete.
 
 ## What the model does *not* do
 
@@ -92,6 +141,20 @@ Worth naming, because they are common in ROI calculators:
    the fee is charged on collected rent.
 8. **Payback including sale proceeds.** Turns payback into a restatement of the
    exit assumption. Operating cash flow only.
+9. **Truncating a loan schedule at maturity.** Shows zero debt from that year
+   on, silently erasing a six-figure liability. The schedule runs to the end of
+   the amortisation and maturity is reported as a refinancing requirement.
+10. **Rescaling an out-of-range figure.** A vacancy rate of `45` is a
+    percentage that was labelled a ratio; the validator **rejects** it rather
+    than dividing by 100 and hoping.
+11. **Defaulting an ambiguous unit.** `EUR/m²` with no period is rejected, not
+    assumed to be monthly.
+12. **A composite score.** No market rating, no portfolio score, no risk
+    number. Each dimension is reported on its own terms.
+13. **Cross-strategy inference.** A short-let model never falls back to the
+    long-let rent; it names what it is missing.
+14. **Booking equity at purchase.** Value grows from the price paid unless the
+    investor supplies an independent valuation, and doing so raises a warning.
 
 ## What the tool will never do
 

@@ -50,7 +50,9 @@ function WaterfallTable({
     });
 
   return (
-    <div className="-mx-4 overflow-x-auto sm:mx-0">
+    // min-w-0: as a grid item this container defaults to min-width:auto and
+    // would widen to the table's min-width instead of scrolling it.
+    <div className="-mx-4 min-w-0 overflow-x-auto sm:mx-0">
       <table className="w-full min-w-[26rem] border-collapse text-sm">
         <tbody>
           {rows.map((row) => {
@@ -192,7 +194,7 @@ export function Underwriting({ property }: { property: Property }) {
         title="Acquisition"
         subtitle="What it costs to own the asset on day one."
       >
-        <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
+        <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <WaterfallTable
             currency={currency}
             expandable={false}
@@ -229,7 +231,7 @@ export function Underwriting({ property }: { property: Property }) {
               },
             ]}
           />
-          <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-1">
+          <div className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-1">
             <Stat
               label="Price per m²"
               value={formatCurrency(result.acquisition.pricePerSqm, currency)}
@@ -312,9 +314,9 @@ export function Underwriting({ property }: { property: Property }) {
           </div>
         }
       >
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid min-w-0 gap-5 lg:grid-cols-2">
           <WaterfallTable rows={exitRows} currency={currency} expandable={false} />
-          <div>
+          <div className="min-w-0">
             <p
               className="mb-2 text-[11px] font-semibold uppercase tracking-wider"
               style={{ color: 'var(--text-subtle)' }}

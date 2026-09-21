@@ -78,6 +78,74 @@ describe('calculateAcquisitionCost', () => {
     expect(r.totalCostPerSqm).toBeNull();
   });
 
+  it('includes legal fees, financing fees and the initial reserve in the total', () => {
+    // These were added to the model after the first version and were briefly
+    // present in the types and the form but absent from the arithmetic, which
+    // silently dropped them from the total. This test pins them down.
+    const r = calculateAcquisitionCost(
+      facts(),
+      costs({
+        purchaseTaxRate: 0,
+        agencyCommissionRate: 0,
+        notaryFees: 2_000,
+        legalFees: 1_500,
+        financingFees: 1_200,
+        initialReserves: 3_000,
+      }),
+    );
+    expect(r.legalFees).toBe(1_500);
+    expect(r.financingFees).toBe(1_200);
+    expect(r.initialReserves).toBe(3_000);
+    expect(r.totalTransactionCosts).toBeCloseTo(7_700, 6);
+    expect(r.totalAcquisitionCost).toBeCloseTo(207_700, 6);
+  });
+
+  it('lists every non-zero cost line in the breakdown', () => {
+    const r = calculateAcquisitionCost(
+      facts(),
+      costs({
+        purchaseTaxRate: 0.09,
+        notaryFees: 2_000,
+        legalFees: 1_500,
+        agencyCommissionRate: 0.03,
+        financingFees: 1_200,
+        renovationCost: 20_000,
+        furnitureCost: 5_000,
+        initialReserves: 3_000,
+        otherUpfrontCosts: 800,
+      }),
+    );
+    expect(r.breakdown.map((l) => l.key)).toEqual([
+      'purchasePrice',
+      'purchaseTax',
+      'notaryFees',
+      'legalFees',
+      'agencyCommission',
+      'financingFees',
+      'renovation',
+      'furniture',
+      'initialReserves',
+      'other',
+    ]);
+    // The breakdown must reconcile to the total, or it is decoration.
+    const sum = r.breakdown.reduce((a, l) => a + l.amount, 0);
+    expect(sum).toBeCloseTo(r.totalAcquisitionCost as number, 6);
+  });
+
+  it('the breakdown always reconciles to the total', () => {
+    const combos = [
+      { purchaseTaxRate: 0, agencyCommissionRate: 0 },
+      { purchaseTaxRate: 0.09, agencyCommissionRate: 0.03, notaryFees: 2_500 },
+      { purchaseTaxAmount: 15_000, agencyCommissionAmount: 4_000, legalFees: 900 },
+      { purchaseTaxRate: 0.04, agencyCommissionRate: 0.02, initialReserves: 10_000 },
+    ];
+    for (const combo of combos) {
+      const r = calculateAcquisitionCost(facts(), costs(combo));
+      const sum = r.breakdown.reduce((a, l) => a + l.amount, 0);
+      expect(sum).toBeCloseTo(r.totalAcquisitionCost as number, 6);
+    }
+  });
+
   it('excludes zero lines from the breakdown', () => {
     const r = calculateAcquisitionCost(
       facts(),

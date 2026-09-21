@@ -34,17 +34,30 @@ tax reports an unknown total acquisition cost rather than an understated one.
 
 ### Total acquisition cost
 ```
-totalTransactionCosts = purchaseTax + notaryFees + agencyCommission
-                      + renovation + furniture + otherUpfrontCosts
+totalTransactionCosts = purchaseTax + notaryFees + legalFees
+                      + agencyCommission + financingFees
+                      + renovation + furniture
+                      + initialReserves + otherUpfrontCosts
 
 totalAcquisitionCost  = purchasePrice + totalTransactionCosts
 ```
+`initialReserves` is working capital committed at purchase: it is cash the
+investor puts in, so it belongs in the total, but it is not consumed, so the
+projection **returns it at exit** (§6).
+
+A percentage cost with no basis makes the whole total `null`. Reporting a
+total that silently omits a line is worse than reporting none.
 This is the denominator for "on total cost" yields and the cost basis for the
 capital gain at exit.
 
 ---
 
 ## 2. Rental operations
+
+> **Strategy first.** Revenue is produced by the selected letting strategy
+> (§2a). The strategies share nothing: a short-let occupancy rate is not a
+> long-let one, and a strategy missing its own inputs returns `null` revenue
+> with the missing fields named rather than borrowing another's.
 
 ### Occupancy
 ```
@@ -53,20 +66,58 @@ occupancy = (365 − vacancyDaysPerYear) / 365      clamped to [0, 1]
 The input is **days**, not a market vacancy rate. A missing value leaves
 occupancy unknown; it is not assumed to be a full year.
 
-### Gross potential rent (year *t*)
+### Stabilisation (all strategies)
 ```
-GPR(t) = monthlyRent × (1 + rentGrowth)^(t−1) × (12 − stabilizationMonths(t))
+activeShare(t) = (12 − stabilizationMonths) / 12   if t = 1
+               = 1                                 otherwise
+```
+Months of works, fit-out or letting-up with no revenue. Applies to year 1 only
+and to **every** strategy. Omitting it materially overstates IRR on a
+refurbishment case.
 
-stabilizationMonths(t) = stabilizationMonths   if t = 1
-                       = 0                     otherwise
+## 2a. Rental strategies
+
+Each computes gross scheduled revenue and the costs only it incurs.
+`growth(t) = (1 + rentGrowth)^(t−1)`.
+
+### Long term
 ```
-The stabilisation period models months of works or letting-up with no rent.
-Omitting it materially overstates IRR on a renovation case.
+GSR(t)    = monthlyRent × 12 × growth(t) × activeShare(t)
+occupancy = (365 − vacancyDays) / 365
+```
+
+### Short term
+```
+GSR(t)      = ADR × 365 × activeShare(t) × growth(t)      (revenue at 100% occupancy)
+occupancy   = occupancyRate                                (share of nights sold)
+platformFee = collected × platformFeeRate
+stays       = (365 × activeShare × occupancy) / averageStayNights
+cleaning    = stays × cleaningCostPerStay
+```
+Cleaning is a cost only when it is **not** recovered from the guest; when it
+is, the ADR is defined net of it and it is neither revenue nor cost. Without
+`averageStayNights` the nights cannot be converted into stays, so cleaning is
+**omitted and the gap reported** rather than a stay length being guessed.
+
+### Student
+```
+GSR(t)    = rentPerRoom × rooms × monthsLetPerYear × growth(t) × activeShare(t)
+occupancy = roomOccupancyRate
+```
+The closed months are **priced out of gross revenue, not counted as a void**: a
+nine-month academic let is a nine-month product. Room occupancy is the void on
+top of that.
+
+### Room by room
+```
+GSR(t)    = rentPerRoom × rooms × 12 × growth(t) × activeShare(t)
+occupancy = roomOccupancyRate
+```
 
 ### Effective gross income
 ```
-vacancyLoss = GPR × (1 − occupancy)
-EGI         = GPR − vacancyLoss
+vacancyLoss = GSR × (1 − occupancy)
+EGI         = GSR − vacancyLoss
 ```
 
 ### Operating expenses (year *t*)
@@ -77,8 +128,11 @@ fixedCosts(t) = (condoFees + propertyTax + insurance
 
 managementFee(t) = EGI(t) × managementFeeRate
 
-opex(t) = fixedCosts(t) + managementFee(t)
+opex(t) = fixedCosts(t) + managementFee(t) + strategyCosts(t)
 ```
+`fixedCosts` covers condo fees, property tax, insurance, maintenance,
+utilities and other recurring costs. `strategyCosts` are platform commission
+and cleaning, which exist only because of the letting strategy.
 The management fee is charged on **collected** rent, not potential rent: an
 agent is not paid on an empty flat.
 
@@ -147,6 +201,21 @@ implementation is cross-checked in tests against the closed form:
 ```
 B(12) = P(1 + i)^12 − PMT × ((1 + i)^12 − 1) / i
 ```
+
+### Interest-only and maturity
+```
+INTEREST_ONLY   interest_m = balance × i ;  principal_m = 0
+                the full principal is outstanding at maturity.
+```
+A `maturityYears` earlier than the amortisation term means the balance
+contractually falls due then. The projection **does not truncate the schedule**
+— doing so would show zero debt after maturity and silently erase the
+liability. Instead it carries on at the same terms, i.e. assumes a refinance,
+and emits `LOAN_MATURES_BEFORE_EXIT` stating that assumption and the amount.
+
+`balloonRepayment` is flagged when the loan still owes principal when it
+contractually falls due: interest-only, or maturity before the end of the
+amortisation.
 
 ### Variable rates
 Rates are supplied as a **per-year path**. At the start of each year the
@@ -223,11 +292,18 @@ equityInvested = totalAcquisitionCost − loanAmount + financingUpfrontCosts
 
 ### Property value
 ```
-value(t) = purchasePrice × (1 + priceGrowth)^t × marketValueMultiplier
+valueBasis = marketValue        when the investor supplied an independent valuation
+           = purchasePrice      otherwise
+
+value(t)   = valueBasis × (1 + priceGrowth)^t × marketValueMultiplier
 ```
-Value grows from the **purchase price**, not the total acquisition cost:
-transaction costs are sunk and are not recovered by market appreciation. The
-multiplier carries a scenario's market repricing (§9).
+Value grows from the **value basis**, not the total acquisition cost:
+transaction costs are sunk and are not recovered by appreciation. The basis
+defaults to the price paid — the tool will not assume a property is worth more
+than was paid for it, because that manufactures equity at t=0. Supplying a
+higher `marketValue` raises `VALUE_ABOVE_PRICE`.
+
+The multiplier carries a scenario's market repricing (§9).
 
 ### Exit
 ```
@@ -235,6 +311,45 @@ salePrice       = value(N)
 sellingCosts    = salePrice × sellingCostsRate
 netSalePrice    = salePrice − sellingCosts
 netSaleProceeds = netSalePrice − debtRemaining − capitalGainsTax
+                  + reservesReleased
+```
+`reservesReleased` is the `initialReserves` committed at purchase, returned to
+the investor because it was never spent.
+
+---
+
+## 6a. The waterfall
+
+The projection emits every step as a named, **signed** row, so the arithmetic
+can be followed line by line rather than taken on trust
+(`src/calculations/waterfall.ts`). Deductions are negative, so each subtotal is
+the sum of the rows above it — and the tests assert exactly that.
+
+```
+Gross scheduled rent
+  − Vacancy
+= Effective gross income
+  − Operating expenses        (expandable into each line)
+= Net operating income
+  − Capital expenditure reserve
+= Unlevered cash flow
+  − Debt service              (expandable into interest + principal)
+= Levered cash flow (pre-tax)
+  − Income tax
+= Levered cash flow (after tax)
+```
+
+At exit:
+```
+Sale price − selling costs = net sale price
+  − capital gains tax − debt repayment + reserves released
+= net sale proceeds
+```
+
+Whole hold:
+```
+− equity invested + cash flow collected + net sale proceeds
+= net investor cash flow
 ```
 
 ---
@@ -327,16 +442,28 @@ LTV(t)            = debtOutstanding(t) / value(t)
 A scenario is a set of **shocks applied to the base inputs**, not a copy of
 them, so editing the base case flows through every scenario.
 
-| Shock | Applied | Direction |
-|-------|---------|-----------|
-| `purchasePriceDelta` | × on the price **paid** | negative ⇒ cheaper entry ⇒ returns **improve** |
-| `marketValueDelta` | × on the asset's **market value** through the hold | negative ⇒ correction ⇒ returns **worsen** |
-| `rentDelta` | × on monthly rent | |
-| `vacancyDelta` | × on vacancy **days**, capped at 365 | |
-| `operatingCostDelta` | × on every recurring cost and the reserve | |
-| `interestRateDelta` | **+** on the mortgage rate, variable-rate loans only | |
-| `priceGrowthDelta` | **+** on the annual growth rate | |
-| `rentGrowthDelta` | **+** on the annual rent growth rate | |
+Shocks are grouped by the part of the deal they hit, and each names exactly
+which inputs it moves. The scenario editor is generated from this catalogue, so
+the labels cannot drift from the arithmetic.
+
+| Group | Shock | Mode | Moves |
+|-------|-------|------|-------|
+| Acquisition | `purchasePriceDelta` | × | `facts.purchasePrice` — negative ⇒ cheaper entry ⇒ returns **improve** |
+| Acquisition | `renovationCostDelta` | × | `acquisition.renovationCost` |
+| Market value | `marketValueDelta` | × | market value through the hold — negative ⇒ correction ⇒ returns **worsen** |
+| Market value | `priceGrowthDelta` | + | `exit.priceGrowthRate` |
+| Revenue | `rentDelta` | × | long-let rent, student and room rents |
+| Revenue | `vacancyDelta` | × | `rental.vacancyDaysPerYear`, capped at 365 |
+| Revenue | `occupancyRateDelta` | × | short-let and room occupancy rates, clamped to [0,1] |
+| Revenue | `adrDelta` | × | `rental.shortTerm.averageDailyRate` |
+| Revenue | `rentGrowthDelta` | + | `rental.rentGrowthRate` |
+| Expenses | `maintenanceDelta` | × | maintenance **and** the capex reserve |
+| Expenses | `managementDelta` | × | `rental.managementFeeRate`, clamped to [0,1] |
+| Expenses | `propertyTaxDelta` | × | `rental.propertyTax` |
+| Expenses | `otherOperatingDelta` | × | condo fees, insurance, utilities, other |
+| Financing | `interestRateDelta` | + | `financing.annualRate` — **variable-rate loans only** |
+| Exit | `sellingCostsDelta` | + | `exit.sellingCostsRate`, clamped to [0,1] |
+| Exit | `exitTaxDelta` | + | `exit.capitalGainsTaxRate`, clamped to [0,1] |
 
 > **The trap this avoids.** "Prices fall 15%" is a *market value* shock. Applying
 > it to the purchase price instead would make a crash look like a bargain and
