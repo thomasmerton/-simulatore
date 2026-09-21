@@ -124,6 +124,20 @@ export const METRIC_SPECS: Record<MarketMetricKey, MetricSpec> = {
     definition:
       'Headline tax rate on rental income for a typical private investor. Indicative only: the rate that applies to a given investor depends on their circumstances.',
   },
+  mortgageRateNominal: {
+    unit: UNITS.ratio,
+    requiresCurrency: false,
+    display: 'percent',
+    definition:
+      'Nominal rate on new mortgage lending to households (ECB: annualised agreed rate). Fees are EXCLUDED — this is the figure the model wants for the interest rate, because it carries financing fees separately.',
+  },
+  mortgageRateAprc: {
+    unit: UNITS.ratio,
+    requiresCurrency: false,
+    display: 'percent',
+    definition:
+      'APR / TAEG on new mortgage lending (ECB: annual percentage rate of charge). INCLUDES ancillary costs, so using it as the interest rate double-counts the fees the model already models. Shown for reference, never applied as the rate.',
+  },
 };
 
 export const CANONICAL_UNITS = METRIC_SPECS;
@@ -145,6 +159,8 @@ export const METRIC_LABELS: Record<MarketMetricKey, string> = {
   buyTransactionCostRate: 'Buying transaction costs',
   sellTransactionCostRate: 'Selling transaction costs',
   rentalIncomeTaxRate: 'Rental income tax rate',
+  mortgageRateNominal: 'Mortgage rate (nominal, excl. fees)',
+  mortgageRateAprc: 'Mortgage APR / TAEG (incl. fees)',
 };
 
 /** Display order. Fixed, so two markets are always read the same way. */
@@ -165,6 +181,8 @@ export const METRIC_ORDER: MarketMetricKey[] = [
   'buyTransactionCostRate',
   'sellTransactionCostRate',
   'rentalIncomeTaxRate',
+  'mortgageRateNominal',
+  'mortgageRateAprc',
 ];
 
 export function isRatioMetric(key: MarketMetricKey): boolean {

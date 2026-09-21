@@ -339,7 +339,11 @@ export type MarketMetricKey =
   | 'transactionsPerYear'
   | 'buyTransactionCostRate'
   | 'sellTransactionCostRate'
-  | 'rentalIncomeTaxRate';
+  | 'rentalIncomeTaxRate'
+  /** Nominal mortgage rate on new lending. Fees excluded. */
+  | 'mortgageRateNominal'
+  /** APR / TAEG on new lending. INCLUDES fees — never the nominal rate. */
+  | 'mortgageRateAprc';
 
 export interface Market {
   id: UUID;

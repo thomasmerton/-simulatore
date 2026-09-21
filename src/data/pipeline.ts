@@ -188,6 +188,8 @@ export const METRIC_BOUNDS: Partial<Record<MarketMetricKey, { min: number; max: 
   buyTransactionCostRate: { min: 0, max: 0.5 },
   sellTransactionCostRate: { min: 0, max: 0.5 },
   rentalIncomeTaxRate: { min: 0, max: 1 },
+  mortgageRateNominal: { min: 0, max: 0.3 },
+  mortgageRateAprc: { min: 0, max: 0.3 },
 };
 
 /** Reject a reporting period that ends in the future or is inverted. */
