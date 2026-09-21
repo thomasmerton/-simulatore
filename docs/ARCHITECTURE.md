@@ -28,7 +28,7 @@ no financial library (the maths is the product — see below).
 
 The boundary that matters: **`/calculations` imports nothing from React and
 nothing from the store.** It is a library of pure functions over plain data.
-That is what makes the 190 tests possible and what would let the same engine
+That is what makes the 392 tests possible and what would let the same engine
 run server-side unchanged.
 
 ```
@@ -45,7 +45,7 @@ src/
 │   ├── scenario.ts       shocks, built-in scenario set
 │   ├── sensitivity.ts    2-D grids, axis and metric catalogues
 │   ├── portfolio.ts      allocation, liquidity, leverage, downside
-│   └── __tests__/        190 tests
+│   └── __tests__/        392 tests
 ├── domain/           types, provenance, defaults — the shared vocabulary
 ├── data/             provider contract, unit normalisation, example dataset
 ├── store/            Repository interface + localStorage impl + React context

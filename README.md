@@ -20,12 +20,24 @@ not
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm test           # 190 tests
-npm run build      # typecheck + production build
+npm run dev
 ```
 
+Then open <http://localhost:5173>.
+
+| Command | What it does |
+|---------|--------------|
+| `npm run dev` | Dev server with hot reload |
+| `npm test` | The full test suite (392 tests) |
+| `npm run build` | Typecheck, then a production build |
+| `npm run fetch-data` | Pull live market data and write a dated snapshot |
+
 No backend or database is required. Data persists in the browser.
+
+> Commands are listed without trailing `#` comments on purpose: interactive
+> zsh — the default shell on macOS — does not treat `#` as a comment, so a
+> pasted line like `npm run dev  # http://localhost:5173` passes the comment
+> to the command as arguments and fails.
 
 ---
 
@@ -145,7 +157,7 @@ divided by 100.
 Mathematical correctness was the top priority, ahead of data, clarity, UI and
 feature count in that order.
 
-- **346 tests** across the engine, including closed-form cross-checks (the
+- **392 tests** across the engine, including closed-form cross-checks (the
   monthly amortisation is verified against the analytic remaining-balance
   formula), waterfall arithmetic reconciliation, and a probe that walks the
   entire result for `NaN`/`Infinity` across 30 degenerate inputs.
@@ -180,7 +192,7 @@ implementation gets wrong:
 ## Project layout
 
 ```
-src/calculations/   pure financial engine — no React, no I/O, 346 tests
+src/calculations/   pure financial engine — no React, no I/O, 392 tests
 src/domain/         types, units, data points, provenance, quality rules
 src/data/           provider contract, pipeline, metric catalogue, examples
 src/store/          Repository interface + localStorage + React context
