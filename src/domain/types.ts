@@ -343,7 +343,9 @@ export type MarketMetricKey =
   /** Nominal mortgage rate on new lending. Fees excluded. */
   | 'mortgageRateNominal'
   /** APR / TAEG on new lending. INCLUDES fees — never the nominal rate. */
-  | 'mortgageRateAprc';
+  | 'mortgageRateAprc'
+  /** Latest published year-on-year change in house prices. NOT a 5y average. */
+  | 'priceGrowthLatestYoY';
 
 export interface Market {
   id: UUID;

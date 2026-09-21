@@ -179,7 +179,9 @@ export const METRIC_BOUNDS: Partial<Record<MarketMetricKey, { min: number; max: 
   vacancyRate: { min: 0, max: 1 },
   priceGrowth5y: { min: -0.5, max: 0.5 },
   rentGrowth5y: { min: -0.5, max: 0.5 },
-  population: { min: 0, max: 50_000_000 },
+  // Generous on the upper side: this metric now carries country-level figures
+  // as well as city ones, and the largest countries run into the billions.
+  population: { min: 0, max: 2_000_000_000 },
   populationGrowth5y: { min: -0.5, max: 0.5 },
   universityStudents: { min: 0, max: 5_000_000 },
   touristArrivalsPerYear: { min: 0, max: 500_000_000 },
@@ -188,6 +190,7 @@ export const METRIC_BOUNDS: Partial<Record<MarketMetricKey, { min: number; max: 
   buyTransactionCostRate: { min: 0, max: 0.5 },
   sellTransactionCostRate: { min: 0, max: 0.5 },
   rentalIncomeTaxRate: { min: 0, max: 1 },
+  priceGrowthLatestYoY: { min: -0.5, max: 0.5 },
   mortgageRateNominal: { min: 0, max: 0.3 },
   mortgageRateAprc: { min: 0, max: 0.3 },
 };

@@ -131,6 +131,13 @@ export const METRIC_SPECS: Record<MarketMetricKey, MetricSpec> = {
     definition:
       'Nominal rate on new mortgage lending to households (ECB: annualised agreed rate). Fees are EXCLUDED — this is the figure the model wants for the interest rate, because it carries financing fees separately.',
   },
+  priceGrowthLatestYoY: {
+    unit: UNITS.ratio,
+    requiresCurrency: false,
+    display: 'percent',
+    definition:
+      'Change in house prices over the latest published period versus the same period a year earlier. A single reading, NOT a multi-year average — one quarter stored as a 5-year annualised rate would misstate the trend badly, so the two are kept apart.',
+  },
   mortgageRateAprc: {
     unit: UNITS.ratio,
     requiresCurrency: false,
@@ -159,6 +166,7 @@ export const METRIC_LABELS: Record<MarketMetricKey, string> = {
   buyTransactionCostRate: 'Buying transaction costs',
   sellTransactionCostRate: 'Selling transaction costs',
   rentalIncomeTaxRate: 'Rental income tax rate',
+  priceGrowthLatestYoY: 'House price growth (latest year-on-year)',
   mortgageRateNominal: 'Mortgage rate (nominal, excl. fees)',
   mortgageRateAprc: 'Mortgage APR / TAEG (incl. fees)',
 };
@@ -181,6 +189,7 @@ export const METRIC_ORDER: MarketMetricKey[] = [
   'buyTransactionCostRate',
   'sellTransactionCostRate',
   'rentalIncomeTaxRate',
+  'priceGrowthLatestYoY',
   'mortgageRateNominal',
   'mortgageRateAprc',
 ];

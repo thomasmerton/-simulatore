@@ -298,6 +298,15 @@ export function collectDataPointWarnings(
     return warnings;
   }
 
+  if (point.source.kind === 'TRANSCRIBED') {
+    warnings.push({
+      code: 'TRANSCRIBED_DATA',
+      severity: 'CAUTION',
+      message: `${label} was read off a published report, not imported from the publisher's own data service. The figure and its source are real, but the transcription is unverified — check it against the source before relying on it.`,
+      paths: [],
+    });
+  }
+
   const age = periodAgeMonths(point.period, asOf);
   if (age !== null && age > STALE_DATA_MONTHS) {
     warnings.push({

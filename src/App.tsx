@@ -21,6 +21,7 @@ import { Scenarios } from '@/ui/pages/Scenarios';
 import { Sensitivity } from '@/ui/pages/Sensitivity';
 import { Deals } from '@/ui/pages/Deals';
 import { Markets } from '@/ui/pages/Markets';
+import { DataSources } from '@/ui/pages/DataSources';
 import { PortfolioBuilder } from '@/ui/pages/PortfolioBuilder';
 import { Allocation } from '@/ui/pages/Allocation';
 import { AssumptionsRegister } from '@/ui/pages/AssumptionsRegister';
@@ -33,6 +34,7 @@ type Tab =
   | 'sensitivity'
   | 'deals'
   | 'markets'
+  | 'sources'
   | 'portfolio'
   | 'allocation'
   | 'inputs'
@@ -47,6 +49,7 @@ const TABS: { id: Tab; label: string; level: Level; needsProperty: boolean }[] =
   { id: 'sensitivity', label: 'Sensitivity', level: 'ANALYSIS', needsProperty: true },
   { id: 'deals', label: 'Deals', level: 'ANALYSIS', needsProperty: false },
   { id: 'markets', label: 'Markets', level: 'ANALYSIS', needsProperty: false },
+  { id: 'sources', label: 'Data sources', level: 'ASSUMPTIONS', needsProperty: false },
   { id: 'portfolio', label: 'Portfolio', level: 'ANALYSIS', needsProperty: false },
   { id: 'allocation', label: 'Capital allocation', level: 'ANALYSIS', needsProperty: false },
   { id: 'inputs', label: 'Inputs', level: 'ASSUMPTIONS', needsProperty: true },
@@ -212,6 +215,8 @@ function Shell() {
               return <Deals />;
             case 'markets':
               return <Markets />;
+            case 'sources':
+              return <DataSources />;
             case 'portfolio':
               return <PortfolioBuilder />;
             case 'allocation':

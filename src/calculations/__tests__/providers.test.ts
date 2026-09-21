@@ -304,3 +304,68 @@ describe('OMI file importer', () => {
     expect(rows[0]?.locazioneMax).toBe(18);
   });
 });
+
+describe('transcribed reference data', () => {
+  it('is stamped TRANSCRIBED, which is a weaker claim than IMPORTED', async () => {
+    const { referenceMarkets, isReferenceMarket } = await import('@/data/referenceData');
+    const [italy] = referenceMarkets();
+    expect(isReferenceMarket(italy!)).toBe(true);
+    for (const point of Object.values(italy!.metrics)) {
+      expect(point?.source.kind).toBe('TRANSCRIBED');
+      expect(point?.source.sourceUrl).toBeTruthy();
+      expect(point?.source.methodology.length).toBeGreaterThan(30);
+      expect(point?.confidence).toBe('LOW');
+    }
+  });
+
+  it('carries a standing warning telling the reader to verify it', async () => {
+    const { referenceMarkets } = await import('@/data/referenceData');
+    const { collectDataPointWarnings } = await import('@/domain/quality');
+    const [italy] = referenceMarkets();
+    const warnings = collectDataPointWarnings(
+      italy!.metrics.mortgageRateNominal!,
+      'Mortgage rate',
+      new Date('2026-09-21'),
+    );
+    expect(warnings.map((w) => w.code)).toContain('TRANSCRIBED_DATA');
+    expect(warnings.map((w) => w.code)).toContain('COARSE_GEOGRAPHY');
+  });
+
+  it('keeps the nominal rate BELOW the TAEG — the gap is the fee load', async () => {
+    const { referenceMarkets } = await import('@/data/referenceData');
+    const [italy] = referenceMarkets();
+    const nominal = italy!.metrics.mortgageRateNominal!.value as number;
+    const aprc = italy!.metrics.mortgageRateAprc!.value as number;
+    expect(nominal).toBeLessThan(aprc);
+    // The spread is the ancillary cost the model already carries separately.
+    expect(aprc - nominal).toBeGreaterThan(0.001);
+    expect(aprc - nominal).toBeLessThan(0.02);
+  });
+
+  it('does NOT store a single quarter as a 5-year annualised rate', async () => {
+    const { referenceMarkets } = await import('@/data/referenceData');
+    const [italy] = referenceMarkets();
+    // The Q4 figure lives in its own metric; priceGrowth5y stays empty for a
+    // 5y series, because storing one quarter there would misstate the trend.
+    expect(italy!.metrics.priceGrowthLatestYoY?.value).toBeCloseTo(0.045, 10);
+    expect(italy!.metrics.priceGrowth5y).toBeUndefined();
+  });
+
+  it('ships no city-level price or rent: those must come from OMI', async () => {
+    const { referenceMarkets } = await import('@/data/referenceData');
+    const [italy] = referenceMarkets();
+    expect(italy!.metrics.avgPricePerSqm).toBeUndefined();
+    expect(italy!.metrics.avgRentPerSqmMonth).toBeUndefined();
+    expect(italy!.geography.level).toBe('COUNTRY');
+  });
+
+  it('passes the validator on every figure it ships', async () => {
+    const { referenceMarkets } = await import('@/data/referenceData');
+    const { validatePoint } = await import('@/data/pipeline');
+    const [italy] = referenceMarkets();
+    for (const [key, point] of Object.entries(italy!.metrics)) {
+      const result = validatePoint(key as never, point!);
+      expect(result.ok, `${key}: ${result.ok ? '' : result.reason}`).toBe(true);
+    }
+  });
+});

@@ -171,7 +171,51 @@ comparison screens can be exercised before a real feed exists. It is:
 
 ---
 
-## 9. Connecting a real source
+## 9. The sources that are wired up
+
+| Source | Covers | Resolution | Status |
+|--------|--------|------------|--------|
+| **Eurostat** | House price index, population | Country | Automatic (`npm run fetch-data`) |
+| **ECB — MIR** | Mortgage rate (nominal **and** APRC, separately) | Country, euro area only | Automatic |
+| **ISTAT** | Population by comune | City | Automatic |
+| **OMI** | Prices and rents per m², by micro-zone | Neighbourhood | **File import** — no public API |
+| **Banca d'Italia, ISTAT** | Mortgage rate, price growth, population | Country | **Transcribed** — read off reports |
+| AirDNA / Transparent | Short-let ADR, occupancy | Neighbourhood | **Not available** — commercial |
+| Numbeo and similar | Crowd-sourced prices/rents | City | **Not connected** — see below |
+| Tax treatment | Rates, reliefs | Varies | **Not automatable** |
+
+### Why OMI is a file import and not a scraper
+
+OMI is the best source for Italian property — transaction-based, from
+registered deeds, by micro-zone — and it has no public API. Scraping the
+consultation service would breach its terms, and a scraper breaks silently the
+first time the markup changes: it keeps returning numbers, just the wrong ones.
+A file the user downloaded is slower and completely traceable.
+
+The importer reads the CSV **by column name**, never by position, because OMI
+has changed column order between releases and a positional read would silently
+swap price for rent. OMI quotes a *range* per zone; the midpoint is taken and
+the fact that it is a midpoint is recorded in the methodology.
+
+### Why Numbeo is deliberately not connected
+
+Crowd-sourced figures have no stated methodology, no sampling frame and no
+reporting period. They cannot satisfy the mandatory fields in §2, so importing
+them would mean fabricating a period and a method — an assumption wearing the
+costume of data.
+
+### The nominal rate versus the APRC
+
+The ECB publishes both, and so does Banca d'Italia. For June 2026 the Italian
+figures were roughly **3.50% nominal** and **3.95% TAEG**. The ~45bp gap *is*
+the ancillary cost — which this model already carries separately as
+`acquisition.financingFees`. Importing the TAEG as the interest rate would
+count those fees twice, so they are stored as two different metrics and the
+APRC is never applied as the rate.
+
+---
+
+## 10. Connecting a real source
 
 1. Implement `MarketDataProvider` (`src/data/pipeline.ts`): `id`, `name`,
    `methodology`, `sourceUrl`, `fetchMarket(query)`.

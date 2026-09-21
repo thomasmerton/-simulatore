@@ -57,11 +57,16 @@ export interface DataSourceRef {
   /** How the publisher produced the figure. Required, free text. */
   methodology: string;
   /**
-   * IMPORTED  — came through a provider and the normalizer.
-   * MANUAL    — typed in by the user, who is then the source.
-   * EXAMPLE   — illustrative placeholder; must be flagged wherever shown.
+   * IMPORTED    — machine-imported from the publisher through the pipeline.
+   * MANUAL      — typed in by the user, who is then the source.
+   * TRANSCRIBED — read off a published report by hand rather than imported
+   *               from the publisher's own API. The figure is real and the
+   *               source is named, but nothing verified the transcription, so
+   *               it carries a standing warning to check it. This is a weaker
+   *               claim than IMPORTED and the UI must not blur the two.
+   * EXAMPLE     — illustrative placeholder; must be flagged wherever shown.
    */
-  kind: 'IMPORTED' | 'MANUAL' | 'EXAMPLE';
+  kind: 'IMPORTED' | 'MANUAL' | 'TRANSCRIBED' | 'EXAMPLE';
 }
 
 export interface DataPoint {

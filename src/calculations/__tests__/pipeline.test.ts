@@ -146,6 +146,28 @@ describe('validator', () => {
   });
 });
 
+describe('metric bounds', () => {
+  it('accepts a country-level population, not just a city one', () => {
+    const r = normalizeObservation(
+      obs({ metric: 'population', value: 58_934_000, unit: UNITS.count, currency: null }),
+      payload([]),
+      '2025-01-01T00:00:00.000Z',
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(validatePoint('population', r.point).ok).toBe(true);
+  });
+
+  it('still rejects a nonsensical population', () => {
+    const r = normalizeObservation(
+      obs({ metric: 'population', value: -5, unit: UNITS.count, currency: null }),
+      payload([]),
+      '2025-01-01T00:00:00.000Z',
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(validatePoint('population', r.point).ok).toBe(false);
+  });
+});
+
 describe('runPipeline', () => {
   it('keeps the good and reports every rejection with a reason', () => {
     const result = runPipeline(
