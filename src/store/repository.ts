@@ -11,7 +11,14 @@
  * formula is corrected.
  */
 
-import type { Market, Portfolio, Property, Scenario } from '@/domain/types';
+import type {
+  AllocationStrategy,
+  Market,
+  Portfolio,
+  Property,
+  Scenario,
+  TaxProfile,
+} from '@/domain/types';
 
 export interface Repository {
   listProperties(): Promise<Property[]>;
@@ -27,6 +34,12 @@ export interface Repository {
 
   getPortfolio(): Promise<Portfolio | null>;
   savePortfolio(portfolio: Portfolio): Promise<void>;
+
+  listTaxProfiles(): Promise<TaxProfile[]>;
+  saveTaxProfiles(profiles: TaxProfile[]): Promise<void>;
+
+  listAllocationStrategies(): Promise<AllocationStrategy[]>;
+  saveAllocationStrategies(strategies: AllocationStrategy[]): Promise<void>;
 }
 
 const KEYS = {
@@ -34,6 +47,8 @@ const KEYS = {
   markets: 'reia.markets.v1',
   scenarios: 'reia.scenarios.v1',
   portfolio: 'reia.portfolio.v1',
+  taxProfiles: 'reia.taxProfiles.v1',
+  allocations: 'reia.allocations.v1',
 } as const;
 
 function read<T>(key: string, fallback: T): T {
@@ -103,6 +118,22 @@ export class LocalStorageRepository implements Repository {
 
   async savePortfolio(portfolio: Portfolio): Promise<void> {
     write(KEYS.portfolio, portfolio);
+  }
+
+  async listTaxProfiles(): Promise<TaxProfile[]> {
+    return read<TaxProfile[]>(KEYS.taxProfiles, []);
+  }
+
+  async saveTaxProfiles(profiles: TaxProfile[]): Promise<void> {
+    write(KEYS.taxProfiles, profiles);
+  }
+
+  async listAllocationStrategies(): Promise<AllocationStrategy[]> {
+    return read<AllocationStrategy[]>(KEYS.allocations, []);
+  }
+
+  async saveAllocationStrategies(strategies: AllocationStrategy[]): Promise<void> {
+    write(KEYS.allocations, strategies);
   }
 }
 

@@ -24,18 +24,18 @@ import { isFiniteNumber } from './finance';
  * rather than clamped.
  */
 export function calculateBreakEvenOccupancy(params: {
-  grossPotentialRent: number | null;
+  grossScheduledRevenue: number | null;
   fixedOperatingExpenses: number | null;
   managementFeeRate: number | null;
   capexReserve?: number;
   debtService?: number;
 }): number | null {
-  const { grossPotentialRent, fixedOperatingExpenses, managementFeeRate } = params;
-  if (!isFiniteNumber(grossPotentialRent) || grossPotentialRent <= 0) return null;
+  const { grossScheduledRevenue, fixedOperatingExpenses, managementFeeRate } = params;
+  if (!isFiniteNumber(grossScheduledRevenue) || grossScheduledRevenue <= 0) return null;
   if (!isFiniteNumber(fixedOperatingExpenses)) return null;
 
   const feeRate = isFiniteNumber(managementFeeRate) ? managementFeeRate : 0;
-  const revenuePerUnitOccupancy = grossPotentialRent * (1 - feeRate);
+  const revenuePerUnitOccupancy = grossScheduledRevenue * (1 - feeRate);
   if (revenuePerUnitOccupancy <= 0) return null;
 
   const costs =

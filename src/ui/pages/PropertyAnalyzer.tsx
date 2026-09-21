@@ -7,7 +7,17 @@
  */
 
 import { useMemo } from 'react';
-import type { Property, PropertyCondition, PropertyInputs, RateType } from '@/domain/types';
+import type {
+  Property,
+  PropertyCondition,
+  PropertyInputs,
+  RateType,
+  RentalStrategy,
+  RoomByRoomAssumptions,
+  ShortTermAssumptions,
+  StudentAssumptions,
+} from '@/domain/types';
+import { RENTAL_STRATEGY_LABELS } from '@/domain/types';
 import { runProjection } from '@/calculations/projection';
 import { useApp } from '@/store/AppStore';
 import {
@@ -62,6 +72,47 @@ export function PropertyAnalyzer({ property }: { property: Property }) {
     updatePropertyInputs(property.id, next, [`${String(section)}.${String(key)}`]);
   }
 
+  /** Location is a nested object, so it gets its own writer. */
+  function setLocation(patch: Partial<PropertyInputs['facts']['location']>) {
+    const next: PropertyInputs = {
+      ...inputs,
+      facts: { ...inputs.facts, location: { ...inputs.facts.location, ...patch } },
+    };
+    updatePropertyInputs(property.id, next, ['facts.location']);
+  }
+
+  /** Each strategy's assumptions live in their own nested block. */
+  function setShortTerm<K extends keyof ShortTermAssumptions>(
+    key: K,
+    value: ShortTermAssumptions[K],
+  ) {
+    const next: PropertyInputs = {
+      ...inputs,
+      rental: { ...inputs.rental, shortTerm: { ...inputs.rental.shortTerm, [key]: value } },
+    };
+    updatePropertyInputs(property.id, next, [`rental.shortTerm.${String(key)}`]);
+  }
+
+  function setStudent<K extends keyof StudentAssumptions>(key: K, value: StudentAssumptions[K]) {
+    const next: PropertyInputs = {
+      ...inputs,
+      rental: { ...inputs.rental, student: { ...inputs.rental.student, [key]: value } },
+    };
+    updatePropertyInputs(property.id, next, [`rental.student.${String(key)}`]);
+  }
+
+  function setRoomByRoom<K extends keyof RoomByRoomAssumptions>(
+    key: K,
+    value: RoomByRoomAssumptions[K],
+  ) {
+    const next: PropertyInputs = {
+      ...inputs,
+      rental: { ...inputs.rental, roomByRoom: { ...inputs.rental.roomByRoom, [key]: value } },
+    };
+    updatePropertyInputs(property.id, next, [`rental.roomByRoom.${String(key)}`]);
+  }
+
+  const strategy = inputs.rental.strategy;
   const p = (path: string) => provenance[path];
 
   return (
@@ -188,18 +239,29 @@ export function PropertyAnalyzer({ property }: { property: Property }) {
             placeholder="e.g. Via Roma 12"
           />
           <TextField
-            id="city"
-            label="City"
-            value={inputs.facts.city}
-            onChange={(v) => set('facts', 'city', v)}
-            provenance={p('facts.city')}
+            id="country"
+            label="Country"
+            value={inputs.facts.location.country}
+            onChange={(v) => setLocation({ country: v })}
+            provenance={p('facts.location')}
           />
           <TextField
-            id="district"
-            label="District / zone"
-            value={inputs.facts.district}
-            onChange={(v) => set('facts', 'district', v)}
-            provenance={p('facts.district')}
+            id="region"
+            label="Region"
+            value={inputs.facts.location.region ?? ''}
+            onChange={(v) => setLocation({ region: v || null })}
+          />
+          <TextField
+            id="city"
+            label="City"
+            value={inputs.facts.location.city ?? ''}
+            onChange={(v) => setLocation({ city: v || null })}
+          />
+          <TextField
+            id="neighborhood"
+            label="Neighbourhood"
+            value={inputs.facts.location.neighborhood ?? ''}
+            onChange={(v) => setLocation({ neighborhood: v || null })}
           />
           <TextField
             id="address"
@@ -223,6 +285,15 @@ export function PropertyAnalyzer({ property }: { property: Property }) {
             suffix="€"
             hint="Defaults to the asking price if left empty."
             provenance={p('facts.purchasePrice')}
+          />
+          <NumberField
+            id="marketValue"
+            label="Independent valuation"
+            value={inputs.facts.marketValue}
+            onChange={(v) => set('facts', 'marketValue', v)}
+            suffix="€"
+            hint="Leave empty to value the property at what you paid. The tool will not assume it is worth more."
+            provenance={p('facts.marketValue')}
           />
           <NumberField
             id="sqm"
@@ -346,6 +417,33 @@ export function PropertyAnalyzer({ property }: { property: Property }) {
             provenance={p('acquisition.furnitureCost')}
           />
           <NumberField
+            id="legalFees"
+            label="Legal fees"
+            value={inputs.acquisition.legalFees}
+            onChange={(v) => set('acquisition', 'legalFees', v)}
+            suffix="€"
+            hint="Conveyancing or advice, separate from the notary."
+            provenance={p('acquisition.legalFees')}
+          />
+          <NumberField
+            id="financingFees"
+            label="Financing fees"
+            value={inputs.acquisition.financingFees}
+            onChange={(v) => set('acquisition', 'financingFees', v)}
+            suffix="€"
+            hint="Arrangement, survey and mortgage registration."
+            provenance={p('acquisition.financingFees')}
+          />
+          <NumberField
+            id="initialReserves"
+            label="Initial reserves"
+            value={inputs.acquisition.initialReserves}
+            onChange={(v) => set('acquisition', 'initialReserves', v)}
+            suffix="€"
+            hint="Working capital set aside at purchase. Committed as equity, returned at exit."
+            provenance={p('acquisition.initialReserves')}
+          />
+          <NumberField
             id="otherUpfrontCosts"
             label="Other upfront costs"
             value={inputs.acquisition.otherUpfrontCosts}
@@ -377,26 +475,168 @@ export function PropertyAnalyzer({ property }: { property: Property }) {
         )}
       </Card>
 
-      {/* ---------------- Rental ---------------- */}
-      <Card title="Rental assumptions" subtitle="What the property earns and what it costs to run.">
+      {/* ---------------- Strategy ---------------- */}
+      <Card
+        title="Letting strategy"
+        subtitle="Each strategy has its own assumptions. Nothing is carried across — a short-let occupancy rate is not a long-let one."
+        actions={
+          <select
+            className="rounded-lg border bg-[var(--surface)] px-2.5 py-1.5 text-sm"
+            style={{ borderColor: 'var(--border-strong)' }}
+            value={strategy}
+            onChange={(e) => set('rental', 'strategy', e.target.value as RentalStrategy)}
+          >
+            {(Object.keys(RENTAL_STRATEGY_LABELS) as RentalStrategy[]).map((k) => (
+              <option key={k} value={k}>
+                {RENTAL_STRATEGY_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        }
+      >
+        {strategy === 'LONG_TERM' && (
+          <FieldGrid>
+            <NumberField
+              id="monthlyRent"
+              label="Monthly rent"
+              value={inputs.rental.monthlyRent}
+              onChange={(v) => set('rental', 'monthlyRent', v)}
+              suffix="€"
+              provenance={p('rental.monthlyRent')}
+            />
+            <NumberField
+              id="vacancyDays"
+              label="Vacancy"
+              value={inputs.rental.vacancyDaysPerYear}
+              onChange={(v) => set('rental', 'vacancyDaysPerYear', v)}
+              suffix="days/yr"
+              hint="Empty days per year. 30 days is roughly 8% of the year."
+              provenance={p('rental.vacancyDaysPerYear')}
+            />
+          </FieldGrid>
+        )}
+
+        {strategy === 'SHORT_TERM' && (
+          <FieldGrid>
+            <NumberField
+              id="st-adr"
+              label="Average daily rate"
+              value={inputs.rental.shortTerm.averageDailyRate}
+              onChange={(v) => setShortTerm('averageDailyRate', v)}
+              suffix="€"
+              hint="Net of any cleaning fee billed separately to the guest."
+              provenance={p('rental.shortTerm.averageDailyRate')}
+            />
+            <PercentField
+              id="st-occ"
+              label="Occupancy rate"
+              value={inputs.rental.shortTerm.occupancyRate}
+              onChange={(v) => setShortTerm('occupancyRate', v)}
+              hint="Share of nights sold across the year."
+              provenance={p('rental.shortTerm.occupancyRate')}
+            />
+            <PercentField
+              id="st-fee"
+              label="Platform commission"
+              value={inputs.rental.shortTerm.platformFeeRate}
+              onChange={(v) => setShortTerm('platformFeeRate', v)}
+              provenance={p('rental.shortTerm.platformFeeRate')}
+            />
+            <NumberField
+              id="st-clean"
+              label="Cleaning per stay"
+              value={inputs.rental.shortTerm.cleaningCostPerStay}
+              onChange={(v) => setShortTerm('cleaningCostPerStay', v)}
+              suffix="€"
+              provenance={p('rental.shortTerm.cleaningCostPerStay')}
+            />
+            <NumberField
+              id="st-stay"
+              label="Average stay"
+              value={inputs.rental.shortTerm.averageStayNights}
+              onChange={(v) => setShortTerm('averageStayNights', v)}
+              suffix="nights"
+              hint="Needed to turn nights sold into number of stays. Without it, cleaning cannot be computed."
+              provenance={p('rental.shortTerm.averageStayNights')}
+            />
+            <ToggleField
+              id="st-recovered"
+              label="Cleaning billed to guest"
+              checked={inputs.rental.shortTerm.cleaningRecoveredFromGuest}
+              onChange={(v) => setShortTerm('cleaningRecoveredFromGuest', v)}
+              hint="When billed to the guest, cleaning is neither revenue nor cost here."
+            />
+          </FieldGrid>
+        )}
+
+        {strategy === 'STUDENT' && (
+          <FieldGrid>
+            <NumberField
+              id="stu-rent"
+              label="Monthly rent per room"
+              value={inputs.rental.student.monthlyRentPerRoom}
+              onChange={(v) => setStudent('monthlyRentPerRoom', v)}
+              suffix="€"
+              provenance={p('rental.student.monthlyRentPerRoom')}
+            />
+            <NumberField
+              id="stu-rooms"
+              label="Rooms let"
+              value={inputs.rental.student.rooms}
+              onChange={(v) => setStudent('rooms', v)}
+              provenance={p('rental.student.rooms')}
+            />
+            <NumberField
+              id="stu-months"
+              label="Months let per year"
+              value={inputs.rental.student.monthsLetPerYear}
+              onChange={(v) => setStudent('monthsLetPerYear', v)}
+              suffix="months"
+              hint="The academic year. The remaining months are priced out of gross revenue, not counted as a void."
+              provenance={p('rental.student.monthsLetPerYear')}
+            />
+            <PercentField
+              id="stu-occ"
+              label="Room occupancy"
+              value={inputs.rental.student.roomOccupancyRate}
+              onChange={(v) => setStudent('roomOccupancyRate', v)}
+              hint="Share of rooms filled during the let period."
+              provenance={p('rental.student.roomOccupancyRate')}
+            />
+          </FieldGrid>
+        )}
+
+        {strategy === 'ROOM_BY_ROOM' && (
+          <FieldGrid>
+            <NumberField
+              id="rbr-rent"
+              label="Monthly rent per room"
+              value={inputs.rental.roomByRoom.monthlyRentPerRoom}
+              onChange={(v) => setRoomByRoom('monthlyRentPerRoom', v)}
+              suffix="€"
+              provenance={p('rental.roomByRoom.monthlyRentPerRoom')}
+            />
+            <NumberField
+              id="rbr-rooms"
+              label="Rooms let"
+              value={inputs.rental.roomByRoom.rooms}
+              onChange={(v) => setRoomByRoom('rooms', v)}
+              provenance={p('rental.roomByRoom.rooms')}
+            />
+            <PercentField
+              id="rbr-occ"
+              label="Room occupancy"
+              value={inputs.rental.roomByRoom.roomOccupancyRate}
+              onChange={(v) => setRoomByRoom('roomOccupancyRate', v)}
+              provenance={p('rental.roomByRoom.roomOccupancyRate')}
+            />
+          </FieldGrid>
+        )}
+      </Card>
+
+      {/* ---------------- Operating costs ---------------- */}
+      <Card title="Operating assumptions" subtitle="What it costs to run the property, whatever the strategy.">
         <FieldGrid>
-          <NumberField
-            id="monthlyRent"
-            label="Monthly rent"
-            value={inputs.rental.monthlyRent}
-            onChange={(v) => set('rental', 'monthlyRent', v)}
-            suffix="€"
-            provenance={p('rental.monthlyRent')}
-          />
-          <NumberField
-            id="vacancyDays"
-            label="Vacancy"
-            value={inputs.rental.vacancyDaysPerYear}
-            onChange={(v) => set('rental', 'vacancyDaysPerYear', v)}
-            suffix="days/yr"
-            hint="Empty days per year. 30 days is roughly 8% of the year."
-            provenance={p('rental.vacancyDaysPerYear')}
-          />
           <NumberField
             id="stabilizationMonths"
             label="Months empty at the start"
@@ -461,6 +701,15 @@ export function PropertyAnalyzer({ property }: { property: Property }) {
             onChange={(v) => set('rental', 'managementFeeRate', v)}
             hint="Charged on collected rent, so it falls when the flat is empty."
             provenance={p('rental.managementFeeRate')}
+          />
+          <NumberField
+            id="utilities"
+            label="Utilities (owner-paid)"
+            value={inputs.rental.utilities}
+            onChange={(v) => set('rental', 'utilities', v)}
+            suffix="€/yr"
+            hint="Usually zero on a long let and material on a short let."
+            provenance={p('rental.utilities')}
           />
           <NumberField
             id="otherOperatingCosts"
@@ -538,13 +787,26 @@ export function PropertyAnalyzer({ property }: { property: Property }) {
                 hint="Rate shocks in scenarios apply to variable-rate loans only."
                 provenance={p('financing.rateType')}
               />
+              <SelectField
+                id="amortizationType"
+                label="Amortisation"
+                value={inputs.financing.amortizationType}
+                options={[
+                  { value: 'AMORTIZING', label: 'Amortising (level instalments)' },
+                  { value: 'INTEREST_ONLY', label: 'Interest only' },
+                ]}
+                onChange={(v) => set('financing', 'amortizationType', v ?? 'AMORTIZING')}
+                hint="Interest-only leaves the whole principal outstanding at maturity."
+                provenance={p('financing.amortizationType')}
+              />
               <NumberField
-                id="financingUpfront"
-                label="Arrangement costs"
-                value={inputs.financing.upfrontCosts}
-                onChange={(v) => set('financing', 'upfrontCosts', v)}
-                suffix="€"
-                provenance={p('financing.upfrontCosts')}
+                id="maturityYears"
+                label="Maturity"
+                value={inputs.financing.maturityYears}
+                onChange={(v) => set('financing', 'maturityYears', v)}
+                suffix="years"
+                hint="Leave empty when the loan runs to the end of its amortisation. A shorter maturity leaves a balloon."
+                provenance={p('financing.maturityYears')}
               />
             </FieldGrid>
 

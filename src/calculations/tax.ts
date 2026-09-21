@@ -9,7 +9,7 @@
  * the defaults shipped with the app are flagged MODEL_ASSUMPTION.
  */
 
-import type { IncomeTaxAssumptions } from '@/domain/types';
+import type { ExitAssumptions, IncomeTaxAssumptions, PropertyInputs, TaxProfile } from '@/domain/types';
 import { isFiniteNumber } from './finance';
 
 export interface IncomeTaxResult {
@@ -80,4 +80,72 @@ export function calculateCapitalGainsTax(
     return { gain, tax: 0, exempt };
   }
   return { gain, tax: gain * rate, exempt: false };
+}
+
+/* ------------------------------------------------------------------ *
+ * Tax profiles
+ * ------------------------------------------------------------------ */
+
+/**
+ * Apply a TaxProfile to a property's inputs.
+ *
+ * A profile is a NAMED, SOURCED, DATED set of tax assumptions for a country,
+ * property type, investor type and transaction type. Applying it overwrites
+ * the property's own tax fields, so the same deal can be re-underwritten
+ * under a different jurisdiction by swapping profiles.
+ *
+ * Nothing here is tax advice. A profile with `verified: false` produces
+ * figures the data-quality layer flags as MODEL_ASSUMPTION, however precise
+ * the rates look.
+ */
+export function applyTaxProfile(inputs: PropertyInputs, profile: TaxProfile): PropertyInputs {
+  const exit: ExitAssumptions = {
+    ...inputs.exit,
+    sellingCostsRate: profile.sellingCostsRate ?? inputs.exit.sellingCostsRate,
+    capitalGainsTaxRate: profile.capitalGainsTaxRate,
+    capitalGainsExemptAfterYears: profile.capitalGainsExemptAfterYears,
+  };
+
+  return {
+    ...inputs,
+    acquisition: {
+      ...inputs.acquisition,
+      purchaseTaxRate: profile.purchaseTaxRate,
+    },
+    incomeTax: {
+      mode: profile.incomeTaxMode,
+      rate: profile.incomeTaxRate,
+      interestDeductible: profile.interestDeductible,
+    },
+    exit,
+  };
+}
+
+/** The dotted input paths a tax profile governs, for the provenance sidecar. */
+export const TAX_PROFILE_PATHS = [
+  'acquisition.purchaseTaxRate',
+  'incomeTax.mode',
+  'incomeTax.rate',
+  'incomeTax.interestDeductible',
+  'exit.sellingCostsRate',
+  'exit.capitalGainsTaxRate',
+  'exit.capitalGainsExemptAfterYears',
+] as const;
+
+/**
+ * Whether a profile is complete enough to underwrite with.
+ * An incomplete profile is usable — the missing pieces simply report as
+ * unavailable — but the user should know which pieces are absent.
+ */
+export function taxProfileGaps(profile: TaxProfile): string[] {
+  const gaps: string[] = [];
+  if (!isFiniteNumber(profile.purchaseTaxRate)) gaps.push('purchase tax rate');
+  if (profile.incomeTaxMode !== 'NONE' && !isFiniteNumber(profile.incomeTaxRate)) {
+    gaps.push('income tax rate');
+  }
+  if (!isFiniteNumber(profile.capitalGainsTaxRate)) gaps.push('capital gains tax rate');
+  if (!isFiniteNumber(profile.sellingCostsRate)) gaps.push('selling costs');
+  if (!profile.source) gaps.push('source');
+  if (!profile.effectiveDate) gaps.push('effective date');
+  return gaps;
 }

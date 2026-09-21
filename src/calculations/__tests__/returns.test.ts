@@ -95,7 +95,7 @@ describe('yields', () => {
 describe('calculateBreakEvenOccupancy', () => {
   it('is costs over potential rent when there is no management fee', () => {
     const r = calculateBreakEvenOccupancy({
-      grossPotentialRent: 12_000,
+      grossScheduledRevenue: 12_000,
       fixedOperatingExpenses: 1_200,
       managementFeeRate: 0,
     });
@@ -104,7 +104,7 @@ describe('calculateBreakEvenOccupancy', () => {
 
   it('nets the management fee off revenue rather than adding it to costs', () => {
     const r = calculateBreakEvenOccupancy({
-      grossPotentialRent: 12_000,
+      grossScheduledRevenue: 12_000,
       fixedOperatingExpenses: 1_200,
       managementFeeRate: 0.1,
     });
@@ -114,7 +114,7 @@ describe('calculateBreakEvenOccupancy', () => {
 
   it('includes the capex reserve and debt service', () => {
     const r = calculateBreakEvenOccupancy({
-      grossPotentialRent: 12_000,
+      grossScheduledRevenue: 12_000,
       fixedOperatingExpenses: 1_200,
       managementFeeRate: 0,
       capexReserve: 600,
@@ -125,7 +125,7 @@ describe('calculateBreakEvenOccupancy', () => {
 
   it('reports a break-even above 100% rather than clamping it', () => {
     const r = calculateBreakEvenOccupancy({
-      grossPotentialRent: 12_000,
+      grossScheduledRevenue: 12_000,
       fixedOperatingExpenses: 4_000,
       managementFeeRate: 0,
       debtService: 12_000,
@@ -136,7 +136,7 @@ describe('calculateBreakEvenOccupancy', () => {
   it('is undefined without potential rent', () => {
     expect(
       calculateBreakEvenOccupancy({
-        grossPotentialRent: null,
+        grossScheduledRevenue: null,
         fixedOperatingExpenses: 1_200,
         managementFeeRate: 0,
       }),

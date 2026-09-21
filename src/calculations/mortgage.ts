@@ -31,9 +31,23 @@ export interface DebtYear {
 
 export interface LoanTerms {
   loanAmount: number;
+  /** Amortisation period: the schedule over which principal is repaid. */
   termYears: number;
   /** Annual nominal rate per year of the term. Length must equal termYears. */
   ratePath: number[];
+  /**
+   * AMORTIZING    — level instalments repay the principal over the term.
+   * INTEREST_ONLY — interest only; the whole principal is outstanding at the
+   *                 end and falls due as a balloon.
+   */
+  amortizationType?: 'AMORTIZING' | 'INTEREST_ONLY';
+  /**
+   * Maturity, when the loan falls due before it is fully amortised. The
+   * schedule stops here and whatever principal remains is a balloon that must
+   * be repaid or refinanced. Modelling a 25-year amortisation on a 10-year
+   * maturity without this would understate what the borrower owes.
+   */
+  maturityYears?: number | null;
 }
 
 /**
@@ -76,28 +90,44 @@ export function calculateDebtSchedule(terms: LoanTerms): DebtYear[] {
   const { loanAmount, termYears } = terms;
   if (!isFiniteNumber(loanAmount) || loanAmount <= 0 || termYears <= 0) return [];
 
+  const interestOnly = terms.amortizationType === 'INTEREST_ONLY';
+  // The schedule runs to maturity when one is set and it comes first.
+  const lastYear =
+    isFiniteNumber(terms.maturityYears) && terms.maturityYears > 0
+      ? Math.min(termYears, Math.round(terms.maturityYears))
+      : termYears;
+
   const schedule: DebtYear[] = [];
   let balance = loanAmount;
 
-  for (let year = 1; year <= termYears; year++) {
+  for (let year = 1; year <= lastYear; year++) {
     const rate = terms.ratePath[year - 1] ?? terms.ratePath[terms.ratePath.length - 1] ?? 0;
     const remainingMonths = (termYears - year + 1) * MONTHS_PER_YEAR;
     const monthlyRate = rate / MONTHS_PER_YEAR;
-    // Re-price on the outstanding balance over the remaining term.
-    const instalment = payment(balance, monthlyRate, remainingMonths) ?? 0;
+    // Re-price on the outstanding balance over the remaining AMORTISATION
+    // term, which is unaffected by an earlier maturity.
+    const instalment = interestOnly
+      ? balance * monthlyRate
+      : (payment(balance, monthlyRate, remainingMonths) ?? 0);
 
     const openingBalance = balance;
     let interestPaid = 0;
     let principalPaid = 0;
 
-    for (let m = 0; m < MONTHS_PER_YEAR && balance > 0; m++) {
-      const interest = balance * monthlyRate;
-      let principal = instalment - interest;
-      if (principal > balance) principal = balance; // final instalment
-      interestPaid += interest;
-      principalPaid += principal;
-      balance -= principal;
-      if (balance < 1e-6) balance = 0;
+    if (interestOnly) {
+      // Interest accrues monthly on an unchanging balance; no principal is
+      // repaid, so the full amount is outstanding at maturity.
+      interestPaid = balance * monthlyRate * MONTHS_PER_YEAR;
+    } else {
+      for (let m = 0; m < MONTHS_PER_YEAR && balance > 0; m++) {
+        const interest = balance * monthlyRate;
+        let principal = instalment - interest;
+        if (principal > balance) principal = balance; // final instalment
+        interestPaid += interest;
+        principalPaid += principal;
+        balance -= principal;
+        if (balance < 1e-6) balance = 0;
+      }
     }
 
     schedule.push({

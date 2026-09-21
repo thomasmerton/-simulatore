@@ -72,6 +72,10 @@ export interface ExitResult {
   capitalGain: number | null;
   capitalGainsTax: number;
   capitalGainsExempt: boolean;
+  /** True when the loan had not fully amortised and its balance fell due. */
+  balloonRepayment: boolean;
+  /** Working capital committed at purchase and returned on exit. */
+  reservesReleased: number;
   /** Cash in hand after repaying debt, costs and tax. */
   netSaleProceeds: number | null;
 }
@@ -87,7 +91,7 @@ export interface ProjectionResult {
 
   /* Headline metrics ------------------------------------------------- */
   year1: {
-    grossPotentialRent: number | null;
+    grossScheduledRevenue: number | null;
     effectiveGrossIncome: number | null;
     operatingExpenses: number | null;
     noi: number | null;
@@ -141,7 +145,11 @@ export function runProjection(
   const { facts, acquisition: acqCosts, rental, financing, incomeTax, exit, settings } = inputs;
 
   const acquisition = calculateAcquisitionCost(facts, acqCosts);
-  const holdingYears = Math.max(1, Math.round(exit.holdingPeriodYears));
+  // Guard the horizon before it reaches the loop bounds and the exit record:
+  // a non-finite holding period would otherwise propagate NaN into exit.year.
+  const holdingYears = isFiniteNumber(exit.holdingPeriodYears)
+    ? Math.max(1, Math.round(exit.holdingPeriodYears))
+    : 1;
 
   /* --- Debt ------------------------------------------------------------- */
   const loanAmount = calculateLoanAmount(financing, acquisition.purchasePrice);
@@ -151,6 +159,8 @@ export function runProjection(
       : 0;
 
   let debtSchedule: DebtYear[] = [];
+  let maturityYear: number | null = null;
+  let balanceAtMaturity = 0;
   if (financing.enabled && isFiniteNumber(loanAmount) && loanAmount > 0 && termYears > 0) {
     const ratePath = buildRatePath(
       financing,
@@ -158,7 +168,16 @@ export function runProjection(
       options.rateShock ?? 0,
       options.shockFromYear ?? 1,
     );
-    debtSchedule = calculateDebtSchedule({ loanAmount, termYears, ratePath });
+    // The schedule is built over the full AMORTISATION term, not truncated at
+    // maturity. Truncating it would leave the projection showing zero debt
+    // after maturity — a liability silently vanishing. Maturity is handled
+    // below as a refinancing requirement instead, which is what it actually is.
+    debtSchedule = calculateDebtSchedule({
+      loanAmount,
+      termYears,
+      ratePath,
+      amortizationType: financing.amortizationType,
+    });
     if (financing.rateType === 'FIXED' && (options.rateShock ?? 0) !== 0) {
       notes.push(
         note(
@@ -177,6 +196,27 @@ export function runProjection(
         ),
       );
     }
+
+    // A maturity earlier than the amortisation term means the outstanding
+    // balance contractually falls due then. The projection carries on as if
+    // it were refinanced on the same terms, which is an assumption the user
+    // must accept — so it is stated rather than buried.
+    const maturity =
+      isFiniteNumber(financing.maturityYears) && financing.maturityYears > 0
+        ? Math.round(financing.maturityYears)
+        : termYears;
+    maturityYear = maturity;
+    balanceAtMaturity = debtSchedule[maturity - 1]?.closingBalance ?? 0;
+
+    if (maturity < holdingYears && balanceAtMaturity > 1) {
+      notes.push(
+        note(
+          'WARNING',
+          'LOAN_MATURES_BEFORE_EXIT',
+          `The loan matures in year ${maturity} with roughly ${Math.round(balanceAtMaturity).toLocaleString()} outstanding. The projection assumes it is refinanced on the same terms from then on; if it cannot be, the balance must be repaid or the property sold.`,
+        ),
+      );
+    }
   } else if (financing.enabled) {
     notes.push(
       note(
@@ -188,13 +228,19 @@ export function runProjection(
   }
 
   /* --- Equity at t=0 ---------------------------------------------------- */
-  const financingUpfront = isFiniteNumber(financing.upfrontCosts) ? financing.upfrontCosts : 0;
+  // Financing fees and the initial reserve are already inside the total
+  // acquisition cost (see acquisition.ts), so equity is simply what is left
+  // once the loan has covered part of it.
   const effectiveLoan = debtSchedule.length > 0 ? (loanAmount as number) : 0;
   const equityInvested = isFiniteNumber(acquisition.totalAcquisitionCost)
-    ? acquisition.totalAcquisitionCost - effectiveLoan + financingUpfront
+    ? acquisition.totalAcquisitionCost - effectiveLoan
     : null;
 
   /* --- Year by year ----------------------------------------------------- */
+  const valueBasis = isFiniteNumber(facts.marketValue)
+    ? facts.marketValue
+    : acquisition.purchasePrice;
+
   const years: ProjectionYear[] = [];
   let cumulative = 0;
   let cumulativeKnown = true;
@@ -229,15 +275,16 @@ export function runProjection(
       cumulativeKnown = false;
     }
 
-    // Value grows from the PURCHASE PRICE, not the total acquisition cost:
-    // transaction costs are sunk and are not recovered by market appreciation.
+    // Value grows from the property's VALUE BASIS, not the total acquisition
+    // cost: transaction costs are sunk and are not recovered by appreciation.
+    // The basis is the purchase price unless the investor supplied an
+    // independent valuation — the tool will not assume a property is worth
+    // more than was paid for it, because that manufactures equity at t=0.
     const growth = isFiniteNumber(exit.priceGrowthRate) ? exit.priceGrowthRate : 0;
     const valueMultiplier = isFiniteNumber(options.valueMultiplier)
       ? options.valueMultiplier
       : 1;
-    const grownValue = isFiniteNumber(acquisition.purchasePrice)
-      ? compound(acquisition.purchasePrice, growth, y)
-      : null;
+    const grownValue = isFiniteNumber(valueBasis) ? compound(valueBasis, growth, y) : null;
     const propertyValue = isFiniteNumber(grownValue) ? grownValue * valueMultiplier : null;
 
     const loanBalance = debt?.closingBalance ?? 0;
@@ -279,8 +326,21 @@ export function runProjection(
     exit.capitalGainsExemptAfterYears,
   );
 
+  const reservesReleased = isFiniteNumber(acqCosts.initialReserves)
+    ? acqCosts.initialReserves
+    : 0;
+
+  // A balloon is a loan that still owes principal when it contractually falls
+  // due — an interest-only loan, or one whose maturity precedes the end of its
+  // amortisation. It is called out because the investor must repay or
+  // refinance, which a plain "debt remaining" line does not convey.
+  const contractualBalloon =
+    financing.amortizationType === 'INTEREST_ONLY' ||
+    (maturityYear !== null && maturityYear < termYears);
+  const balloonRepayment = contractualBalloon && debtRemaining > 1;
+
   const netSaleProceeds = isFiniteNumber(netSalePrice)
-    ? netSalePrice - debtRemaining - gains.tax
+    ? netSalePrice - debtRemaining - gains.tax + reservesReleased
     : null;
 
   const exitResult: ExitResult = {
@@ -292,6 +352,8 @@ export function runProjection(
     capitalGain: gains.gain,
     capitalGainsTax: gains.tax,
     capitalGainsExempt: gains.exempt,
+    balloonRepayment,
+    reservesReleased,
     netSaleProceeds,
   };
 
@@ -336,14 +398,14 @@ export function runProjection(
     : null;
 
   const breakEvenBeforeDebt = calculateBreakEvenOccupancy({
-    grossPotentialRent: y1Rental?.grossPotentialRent ?? null,
+    grossScheduledRevenue: y1Rental?.grossScheduledRevenue ?? null,
     fixedOperatingExpenses: fixedOpex,
     managementFeeRate: rental.managementFeeRate,
     capexReserve: y1Rental?.capexReserve ?? 0,
   });
 
   const breakEvenAfterDebt = calculateBreakEvenOccupancy({
-    grossPotentialRent: y1Rental?.grossPotentialRent ?? null,
+    grossScheduledRevenue: y1Rental?.grossScheduledRevenue ?? null,
     fixedOperatingExpenses: fixedOpex,
     managementFeeRate: rental.managementFeeRate,
     capexReserve: y1Rental?.capexReserve ?? 0,
@@ -400,16 +462,16 @@ export function runProjection(
     exit: exitResult,
     notes,
     year1: {
-      grossPotentialRent: y1Rental?.grossPotentialRent ?? null,
+      grossScheduledRevenue: y1Rental?.grossScheduledRevenue ?? null,
       effectiveGrossIncome: y1Rental?.effectiveGrossIncome ?? null,
       operatingExpenses: y1Rental?.operatingExpenses ?? null,
       noi: y1Rental?.noi ?? null,
       grossYieldOnPrice: calculateGrossYield(
-        y1Rental?.grossPotentialRent ?? null,
+        y1Rental?.grossScheduledRevenue ?? null,
         acquisition.purchasePrice,
       ),
       grossYieldOnTotalCost: calculateGrossYield(
-        y1Rental?.grossPotentialRent ?? null,
+        y1Rental?.grossScheduledRevenue ?? null,
         acquisition.totalAcquisitionCost,
       ),
       netYieldOnPrice: calculateNetYield(y1Rental?.noi ?? null, acquisition.purchasePrice),

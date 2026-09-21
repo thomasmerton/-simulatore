@@ -1,108 +1,104 @@
 /**
- * Rental operating economics for a single year.
+ * Operating economics for a single year.
  *
- * Definitions used throughout (stated explicitly because conventions differ):
+ * Definitions, stated explicitly because conventions differ:
  *
- *   Gross Potential Rent (GPR) = contractual rent for 12 months of occupancy.
- *   Vacancy loss               = GPR * (1 - occupancy).
- *   Effective Gross Income     = GPR - vacancy loss  ("collected rent").
- *   Operating expenses         = recurring costs of running the asset,
- *                                EXCLUDING debt service, income tax and the
- *                                capex reserve.
- *   NOI                        = EGI - operating expenses.
+ *   Gross Scheduled Revenue  revenue at full occupancy, per the strategy.
+ *   Vacancy loss             revenue lost to voids / unsold nights / empty rooms.
+ *   Effective Gross Income   GSR - vacancy loss  ("collected").
+ *   Operating expenses       recurring costs of running the asset, EXCLUDING
+ *                            debt service, income tax and the capex reserve,
+ *                            plus any costs the letting strategy itself incurs.
+ *   NOI                      EGI - operating expenses.
  *
- * The capex reserve (manutenzione straordinaria) is deliberately kept OUT of
- * NOI and subtracted below it. Folding capex into NOI is common but it makes
- * net yield flatter than reality and breaks comparability with market yields.
+ * The capex reserve is deliberately kept OUT of NOI and subtracted below it.
+ * Folding capex into NOI is common but it flatters net yield and breaks
+ * comparability with published market yields, which are quoted pre-capex.
  */
 
 import type { RentalAssumptions } from '@/domain/types';
-import { DAYS_PER_YEAR, MONTHS_PER_YEAR, compound, isFiniteNumber, sumOptional } from './finance';
+import { calculateStrategyRevenue, type StrategyRevenue } from './strategies';
+import { DAYS_PER_YEAR, compound, isFiniteNumber, sumOptional } from './finance';
 
 export interface OperatingExpenseLine {
   key: string;
   label: string;
   amount: number;
+  /** True when the cost scales with collected revenue rather than being fixed. */
+  variable: boolean;
 }
 
 export interface RentalYearResult {
-  /** 1-based year index. */
   year: number;
   occupancy: number | null;
-  grossPotentialRent: number | null;
+  grossScheduledRevenue: number | null;
   vacancyLoss: number | null;
   effectiveGrossIncome: number | null;
   operatingExpenses: number | null;
   operatingExpenseLines: OperatingExpenseLine[];
   noi: number | null;
   capexReserve: number;
+  revenue: StrategyRevenue;
 }
 
 /**
- * Occupancy implied by expected empty days.
- *   occupancy = (365 - vacancyDays) / 365
- * Clamped to [0, 1]. A null input means occupancy is unknown, not 100%.
+ * Occupancy implied by expected empty days (long lets).
+ *   occupancy = (365 - vacancyDays) / 365, clamped to [0, 1]
+ * A null input leaves occupancy unknown; it is not assumed to be a full year.
  */
 export function calculateOccupancy(vacancyDaysPerYear: number | null): number | null {
   if (!isFiniteNumber(vacancyDaysPerYear)) return null;
-  const occupancy = (DAYS_PER_YEAR - vacancyDaysPerYear) / DAYS_PER_YEAR;
-  return Math.min(1, Math.max(0, occupancy));
+  return Math.min(1, Math.max(0, (DAYS_PER_YEAR - vacancyDaysPerYear) / DAYS_PER_YEAR));
 }
 
-/**
- * Gross potential rent for a given year, before vacancy.
- *
- * Year 1 is reduced by the stabilisation period (months of works or letting-up
- * during which no rent is collected). Later years assume a full 12 months at
- * the rent grown by `rentGrowthRate`.
- */
+/** Gross scheduled revenue for the selected strategy in a given year. */
 export function calculateGrossRevenue(
   rental: RentalAssumptions,
   year: number,
 ): number | null {
-  if (!isFiniteNumber(rental.monthlyRent)) return null;
-  const growth = isFiniteNumber(rental.rentGrowthRate) ? rental.rentGrowthRate : 0;
-  const grownRent = compound(rental.monthlyRent, growth, year - 1);
-  if (grownRent === null) return null;
-
-  const stabilization =
-    year === 1 && isFiniteNumber(rental.stabilizationMonths)
-      ? Math.min(MONTHS_PER_YEAR, Math.max(0, rental.stabilizationMonths))
-      : 0;
-
-  return grownRent * (MONTHS_PER_YEAR - stabilization);
+  return calculateStrategyRevenue(rental, year).grossScheduledRevenue;
 }
 
 /**
- * Recurring operating expenses for a given year, grown by `expenseGrowthRate`.
+ * Recurring operating expenses, grown by `expenseGrowthRate`.
  *
- * The management fee is a share of COLLECTED rent (not potential rent): an
- * agent is not paid on an empty flat.
+ * The management fee is a share of COLLECTED revenue, not scheduled revenue:
+ * an agent is not paid on an empty flat. Strategy costs (platform commission,
+ * cleaning) are added here because they are genuine operating costs, but they
+ * are tagged so the waterfall can show them separately.
  */
 export function calculateOperatingExpenses(
   rental: RentalAssumptions,
   year: number,
   effectiveGrossIncome: number | null,
+  strategyCosts: readonly { key: string; label: string; amount: number }[] = [],
 ): { total: number; lines: OperatingExpenseLine[] } {
-  const growth = isFiniteNumber(rental.expenseGrowthRate) ? rental.expenseGrowthRate : 0;
-  const factor = compound(1, growth, year - 1) ?? 1;
+  const rate = isFiniteNumber(rental.expenseGrowthRate) ? rental.expenseGrowthRate : 0;
+  const factor = compound(1, rate, year - 1) ?? 1;
 
   const lines: OperatingExpenseLine[] = [];
-  const push = (key: string, label: string, base: number | null) => {
+  const pushFixed = (key: string, label: string, base: number | null) => {
     if (!isFiniteNumber(base) || base === 0) return;
-    lines.push({ key, label, amount: base * factor });
+    lines.push({ key, label, amount: base * factor, variable: false });
   };
 
-  push('condoFees', 'Condominium fees', rental.condoFees);
-  push('propertyTax', 'Property tax', rental.propertyTax);
-  push('insurance', 'Insurance', rental.insurance);
-  push('ordinaryMaintenance', 'Ordinary maintenance', rental.ordinaryMaintenance);
-  push('otherOperatingCosts', 'Other operating costs', rental.otherOperatingCosts);
+  pushFixed('condoFees', 'Condominium fees', rental.condoFees);
+  pushFixed('propertyTax', 'Property taxes', rental.propertyTax);
+  pushFixed('insurance', 'Insurance', rental.insurance);
+  pushFixed('ordinaryMaintenance', 'Maintenance', rental.ordinaryMaintenance);
+  pushFixed('utilities', 'Utilities', rental.utilities);
+  pushFixed('otherOperatingCosts', 'Other operating expenses', rental.otherOperatingCosts);
+
+  for (const cost of strategyCosts) {
+    if (cost.amount !== 0) {
+      lines.push({ key: cost.key, label: cost.label, amount: cost.amount, variable: true });
+    }
+  }
 
   if (isFiniteNumber(rental.managementFeeRate) && isFiniteNumber(effectiveGrossIncome)) {
     const fee = effectiveGrossIncome * rental.managementFeeRate;
     if (fee !== 0) {
-      lines.push({ key: 'managementFee', label: 'Property management', amount: fee });
+      lines.push({ key: 'managementFee', label: 'Property management', amount: fee, variable: true });
     }
   }
 
@@ -112,8 +108,8 @@ export function calculateOperatingExpenses(
 /** Capex reserve for a given year, grown in line with other costs. */
 export function calculateCapexReserve(rental: RentalAssumptions, year: number): number {
   if (!isFiniteNumber(rental.capexReserve)) return 0;
-  const growth = isFiniteNumber(rental.expenseGrowthRate) ? rental.expenseGrowthRate : 0;
-  return rental.capexReserve * (compound(1, growth, year - 1) ?? 1);
+  const rate = isFiniteNumber(rental.expenseGrowthRate) ? rental.expenseGrowthRate : 0;
+  return rental.capexReserve * (compound(1, rate, year - 1) ?? 1);
 }
 
 /**
@@ -128,32 +124,33 @@ export function calculateNOI(
   return effectiveGrossIncome - operatingExpenses;
 }
 
-/** Full rental picture for one year. */
+/** Full operating picture for one year. */
 export function calculateRentalYear(rental: RentalAssumptions, year: number): RentalYearResult {
-  const occupancy = calculateOccupancy(rental.vacancyDaysPerYear);
-  const grossPotentialRent = calculateGrossRevenue(rental, year);
+  const revenue = calculateStrategyRevenue(rental, year);
+  const { total, lines } = calculateOperatingExpenses(
+    rental,
+    year,
+    revenue.effectiveGrossIncome,
+    revenue.strategyCosts,
+  );
 
-  const vacancyLoss =
-    isFiniteNumber(grossPotentialRent) && occupancy !== null
-      ? grossPotentialRent * (1 - occupancy)
-      : null;
-
-  const effectiveGrossIncome =
-    isFiniteNumber(grossPotentialRent) && isFiniteNumber(vacancyLoss)
-      ? grossPotentialRent - vacancyLoss
-      : null;
-
-  const { total, lines } = calculateOperatingExpenses(rental, year, effectiveGrossIncome);
+  // With no revenue figure there is no NOI: the operating expenses are known
+  // but the income is not, and a "NOI" of minus-the-costs would be a fiction.
+  const noi =
+    revenue.effectiveGrossIncome === null
+      ? null
+      : calculateNOI(revenue.effectiveGrossIncome, total);
 
   return {
     year,
-    occupancy,
-    grossPotentialRent,
-    vacancyLoss,
-    effectiveGrossIncome,
+    occupancy: revenue.occupancy,
+    grossScheduledRevenue: revenue.grossScheduledRevenue,
+    vacancyLoss: revenue.vacancyLoss,
+    effectiveGrossIncome: revenue.effectiveGrossIncome,
     operatingExpenses: total,
     operatingExpenseLines: lines,
-    noi: calculateNOI(effectiveGrossIncome, total),
+    noi,
     capexReserve: calculateCapexReserve(rental, year),
+    revenue,
   };
 }

@@ -17,6 +17,10 @@ import { Button, Card, Notice, Stat, Table, Td, Th } from '../components/primiti
 import { isUntouched } from '@/data/exampleProperty';
 import { AllocationBar, ScenarioBarChart } from '../charts/charts';
 import { BasedOn, CORE_INPUT_PATHS, ProvenanceSummary } from '../components/Assumptions';
+import { ConfidenceBadge, WarningList } from '../components/Warnings';
+import { assessConfidence, collectInputWarnings } from '@/domain/quality';
+import { strategyMissingInputs } from '@/calculations/strategies';
+import { RENTAL_STRATEGY_LABELS } from '@/domain/types';
 import {
   formatCurrency,
   formatCurrencyCompact,
@@ -25,7 +29,7 @@ import {
 } from '../format';
 
 export function Dashboard({ property }: { property: Property }) {
-  const { scenarios, portfolio, properties, loadExampleProperty } = useApp();
+  const { scenarios, portfolio, properties, taxProfiles, loadExampleProperty } = useApp();
   const { inputs, provenance } = property;
   const currency = inputs.settings.currency;
 
@@ -35,6 +39,20 @@ export function Dashboard({ property }: { property: Property }) {
     [inputs, scenarios],
   );
   const portfolioResult = useMemo(() => analyzePortfolio(portfolio), [portfolio]);
+
+  const activeProfile = taxProfiles.find((p) => p.id === property.taxProfileId) ?? null;
+  const confidence = useMemo(
+    () => assessConfidence(provenance, CORE_INPUT_PATHS),
+    [provenance],
+  );
+  const warnings = useMemo(
+    () =>
+      collectInputWarnings(inputs, provenance, {
+        taxProfileVerified: activeProfile ? activeProfile.verified : undefined,
+        strategyMissing: strategyMissingInputs(inputs.rental),
+      }),
+    [inputs, provenance, activeProfile],
+  );
 
   /**
    * The two inputs the IRR is most sensitive to, flexed ±10% each.
@@ -96,9 +114,10 @@ export function Dashboard({ property }: { property: Property }) {
               </h1>
             )}
             <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-              {[inputs.facts.city, inputs.facts.district].filter(Boolean).join(' · ') ||
+              {[inputs.facts.location.city, inputs.facts.location.neighborhood].filter(Boolean).join(' · ') ||
                 'Location not set'}
               {inputs.facts.sqm ? ` · ${inputs.facts.sqm} m²` : ''}
+              {` · ${RENTAL_STRATEGY_LABELS[inputs.rental.strategy]}`}
               {result.acquisition.pricePerSqm
                 ? ` · ${formatCurrency(result.acquisition.pricePerSqm, currency)}/m²`
                 : ''}
@@ -171,9 +190,21 @@ export function Dashboard({ property }: { property: Property }) {
           <p className="mb-2 text-xs font-medium" style={{ color: 'var(--text-subtle)' }}>
             What these figures rest on
           </p>
-          <ProvenanceSummary provenance={provenance} paths={CORE_INPUT_PATHS} />
+          <div className="space-y-2">
+            <ConfidenceBadge assessment={confidence} />
+            <ProvenanceSummary provenance={provenance} paths={CORE_INPUT_PATHS} />
+          </div>
         </div>
       </Card>
+
+      {warnings.length > 0 && (
+        <Card
+          title="Data quality"
+          subtitle="What would change these numbers most if it turned out to be wrong."
+        >
+          <WarningList warnings={warnings} limit={4} />
+        </Card>
+      )}
 
       {drivers.length > 0 && (
         <Notice>

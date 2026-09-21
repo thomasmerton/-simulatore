@@ -1,28 +1,68 @@
 /**
  * Default inputs.
  *
- * IMPORTANT: every non-zero default here is a MODEL ASSUMPTION, not evidence.
- * Each one is registered in `defaultProvenance` so the UI can show the user
- * exactly which numbers they have not yet supplied. Nothing here is a
- * forecast, and nothing is tuned to any specific market.
+ * Every non-zero default here is a MODEL_ASSUMPTION, not evidence. Each is
+ * registered in `starterProvenance` so the UI can show exactly which numbers
+ * the user has not yet supplied.
  *
- * Fields that cannot be guessed at all (price, rent, surface) default to null
- * and are reported as MISSING rather than filled with a plausible number.
+ * Fields that cannot be guessed at all — price, surface, rent — default to
+ * null and report as MISSING rather than being filled with a plausible number.
  */
 
-import type { Portfolio, PropertyInputs } from './types';
+import type {
+  AllocationStrategy,
+  Portfolio,
+  PropertyInputs,
+  RentalStrategy,
+  RoomByRoomAssumptions,
+  ShortTermAssumptions,
+  StudentAssumptions,
+  TaxProfile,
+} from './types';
+import type { Geography } from './datapoint';
 import type { ProvenanceMap } from './provenance';
 
 export const DEFAULT_CURRENCY = 'EUR';
 
+export function emptyGeography(): Geography {
+  return { country: '', region: null, city: null, neighborhood: null, level: 'CITY' };
+}
+
+/** Every short-let parameter is null: none of them can be inferred. */
+export function emptyShortTerm(): ShortTermAssumptions {
+  return {
+    averageDailyRate: null,
+    occupancyRate: null,
+    platformFeeRate: null,
+    cleaningCostPerStay: null,
+    averageStayNights: null,
+    cleaningRecoveredFromGuest: false,
+  };
+}
+
+export function emptyStudent(): StudentAssumptions {
+  return {
+    monthlyRentPerRoom: null,
+    rooms: null,
+    monthsLetPerYear: null,
+    roomOccupancyRate: null,
+  };
+}
+
+export function emptyRoomByRoom(): RoomByRoomAssumptions {
+  return { monthlyRentPerRoom: null, rooms: null, roomOccupancyRate: null };
+}
+
 export function emptyPropertyInputs(): PropertyInputs {
   return {
     facts: {
-      city: '',
-      district: '',
+      location: emptyGeography(),
       address: null,
+      listingUrl: null,
+      propertyType: null,
       askingPrice: null,
       purchasePrice: null,
+      marketValue: null,
       sqm: null,
       rooms: null,
       bathrooms: null,
@@ -36,15 +76,22 @@ export function emptyPropertyInputs(): PropertyInputs {
       purchaseTaxRate: null,
       purchaseTaxAmount: null,
       notaryFees: null,
+      legalFees: null,
       agencyCommissionRate: null,
       agencyCommissionAmount: null,
+      financingFees: null,
       renovationCost: null,
       furnitureCost: null,
+      initialReserves: null,
       otherUpfrontCosts: null,
     },
     rental: {
+      strategy: 'LONG_TERM',
       monthlyRent: null,
       vacancyDaysPerYear: null,
+      shortTerm: emptyShortTerm(),
+      student: emptyStudent(),
+      roomByRoom: emptyRoomByRoom(),
       rentGrowthRate: null,
       stabilizationMonths: null,
       condoFees: null,
@@ -53,6 +100,7 @@ export function emptyPropertyInputs(): PropertyInputs {
       ordinaryMaintenance: null,
       capexReserve: null,
       managementFeeRate: null,
+      utilities: null,
       otherOperatingCosts: null,
       expenseGrowthRate: null,
     },
@@ -63,7 +111,8 @@ export function emptyPropertyInputs(): PropertyInputs {
       annualRate: null,
       termYears: null,
       rateType: 'FIXED',
-      upfrontCosts: null,
+      amortizationType: 'AMORTIZING',
+      maturityYears: null,
     },
     incomeTax: { mode: 'NONE', rate: null, interestDeductible: false },
     exit: {
@@ -78,9 +127,9 @@ export function emptyPropertyInputs(): PropertyInputs {
 }
 
 /**
- * A starting point with the structural assumptions pre-filled so a new user
- * is not faced with thirty empty fields. Market-specific values (price, rent,
- * growth) remain null: they must come from the user or from market data.
+ * A starting point with the STRUCTURAL assumptions pre-filled, so a new user
+ * is not faced with forty empty fields. Market-specific values — price, rent,
+ * growth — stay null: they must come from the user or from market data.
  */
 export function starterPropertyInputs(): PropertyInputs {
   const base = emptyPropertyInputs();
@@ -88,11 +137,12 @@ export function starterPropertyInputs(): PropertyInputs {
     ...base,
     acquisition: {
       ...base.acquisition,
-      purchaseTaxRate: 0.09, // registration tax on a second home in Italy
       notaryFees: 2500,
-      agencyCommissionRate: 0.03,
       renovationCost: 0,
       furnitureCost: 0,
+      legalFees: 0,
+      financingFees: 0,
+      initialReserves: 0,
       otherUpfrontCosts: 0,
     },
     rental: {
@@ -106,6 +156,7 @@ export function starterPropertyInputs(): PropertyInputs {
       ordinaryMaintenance: 0,
       capexReserve: 0,
       managementFeeRate: 0,
+      utilities: 0,
       otherOperatingCosts: 0,
       expenseGrowthRate: 0.02,
     },
@@ -116,28 +167,26 @@ export function starterPropertyInputs(): PropertyInputs {
       annualRate: 0.035,
       termYears: 25,
       rateType: 'FIXED',
-      upfrontCosts: 0,
+      amortizationType: 'AMORTIZING',
+      maturityYears: null,
     },
-    exit: {
-      holdingPeriodYears: 10,
-      priceGrowthRate: 0,
-      sellingCostsRate: 0.03,
-      capitalGainsTaxRate: 0.26,
-      capitalGainsExemptAfterYears: 5,
-    },
+    exit: { ...base.exit, holdingPeriodYears: 10, priceGrowthRate: 0 },
     settings: { discountRate: 0.05, currency: DEFAULT_CURRENCY },
   };
 }
 
 /**
- * Provenance for the starter inputs. Everything pre-filled is a model
- * assumption; everything else is missing until the user supplies it.
+ * Provenance for the starter inputs: everything pre-filled is a model
+ * assumption, everything else is missing until the user supplies it.
+ *
+ * Note what is NOT pre-filled any more: purchase tax, agency commission,
+ * selling costs and capital gains tax now come from a TaxProfile, so that
+ * they carry a country, an effective date and a verified flag rather than
+ * being silent Italian defaults.
  */
 export function starterProvenance(): ProvenanceMap {
   return {
-    'acquisition.purchaseTaxRate': 'MODEL_ASSUMPTION',
     'acquisition.notaryFees': 'MODEL_ASSUMPTION',
-    'acquisition.agencyCommissionRate': 'MODEL_ASSUMPTION',
     'rental.vacancyDaysPerYear': 'MODEL_ASSUMPTION',
     'rental.rentGrowthRate': 'MODEL_ASSUMPTION',
     'rental.expenseGrowthRate': 'MODEL_ASSUMPTION',
@@ -145,13 +194,74 @@ export function starterProvenance(): ProvenanceMap {
     'financing.annualRate': 'MODEL_ASSUMPTION',
     'financing.termYears': 'MODEL_ASSUMPTION',
     'exit.priceGrowthRate': 'MODEL_ASSUMPTION',
-    'exit.sellingCostsRate': 'MODEL_ASSUMPTION',
-    'exit.capitalGainsTaxRate': 'MODEL_ASSUMPTION',
-    'exit.capitalGainsExemptAfterYears': 'MODEL_ASSUMPTION',
     'settings.discountRate': 'MODEL_ASSUMPTION',
     'facts.purchasePrice': 'MISSING',
     'facts.sqm': 'MISSING',
     'rental.monthlyRent': 'MISSING',
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Tax profiles
+ * ------------------------------------------------------------------ */
+
+/**
+ * An UNVERIFIED starting profile for an Italian second home held by a private
+ * individual.
+ *
+ * `verified: false` is the important field. These rates are a plausible
+ * starting point drawn from widely-cited general descriptions of the Italian
+ * regime, not from a reading of the law for any particular investor. Until a
+ * professional confirms them for a specific case, everything derived from
+ * this profile is a MODEL_ASSUMPTION and the UI says so.
+ *
+ * This is not tax advice.
+ */
+export function italianSecondHomeProfile(id: string): TaxProfile {
+  return {
+    id,
+    name: 'Italy — second home, private individual (unverified)',
+    country: 'Italy',
+    propertyType: 'APARTMENT',
+    investorType: 'INDIVIDUAL',
+    transactionType: 'RESIDENTIAL_SECONDARY',
+    purchaseTaxRate: 0.09,
+    incomeTaxMode: 'FLAT_ON_GROSS',
+    incomeTaxRate: 0.21,
+    interestDeductible: false,
+    capitalGainsTaxRate: 0.26,
+    capitalGainsExemptAfterYears: 5,
+    sellingCostsRate: 0.03,
+    source: null,
+    sourceUrl: null,
+    effectiveDate: null,
+    verified: false,
+    notes:
+      'Starting point only. Rates vary with the property, the buyer and the year, and the registration tax base for a second home is often the cadastral value rather than the price. Verify with a professional before relying on any figure.',
+  };
+}
+
+/** A profile with nothing filled in, for a country the user must describe. */
+export function blankTaxProfile(id: string, country = ''): TaxProfile {
+  return {
+    id,
+    name: country ? `${country} — new profile` : 'New tax profile',
+    country,
+    propertyType: 'APARTMENT',
+    investorType: 'INDIVIDUAL',
+    transactionType: 'RESIDENTIAL_SECONDARY',
+    purchaseTaxRate: null,
+    incomeTaxMode: 'NONE',
+    incomeTaxRate: null,
+    interestDeductible: false,
+    capitalGainsTaxRate: null,
+    capitalGainsExemptAfterYears: null,
+    sellingCostsRate: null,
+    source: null,
+    sourceUrl: null,
+    effectiveDate: null,
+    verified: false,
+    notes: null,
   };
 }
 
@@ -166,3 +276,26 @@ export function emptyPortfolio(id: string): Portfolio {
     assets: [],
   };
 }
+
+export function emptyAllocationStrategy(id: string, name: string): AllocationStrategy {
+  return { id, name, description: '', assets: [] };
+}
+
+export const STRATEGY_REQUIRED_FIELDS: Record<RentalStrategy, string[]> = {
+  LONG_TERM: ['rental.monthlyRent', 'rental.vacancyDaysPerYear'],
+  SHORT_TERM: [
+    'rental.shortTerm.averageDailyRate',
+    'rental.shortTerm.occupancyRate',
+    'rental.shortTerm.platformFeeRate',
+  ],
+  STUDENT: [
+    'rental.student.monthlyRentPerRoom',
+    'rental.student.rooms',
+    'rental.student.monthsLetPerYear',
+  ],
+  ROOM_BY_ROOM: [
+    'rental.roomByRoom.monthlyRentPerRoom',
+    'rental.roomByRoom.rooms',
+    'rental.roomByRoom.roomOccupancyRate',
+  ],
+};

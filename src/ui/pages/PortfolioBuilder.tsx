@@ -115,14 +115,48 @@ export function PortfolioBuilder() {
             <Card title="Asset allocation" subtitle="Share of invested equity by class.">
               <AllocationBar slices={result.allocationByClass} />
             </Card>
-            <Card title="Geographic exposure" subtitle="Share of invested equity by location tag.">
-              {result.allocationByGeography.length > 0 ? (
-                <AllocationBar slices={result.allocationByGeography} />
+            <Card title="Geographic exposure" subtitle="Share of invested equity by country and city.">
+              {result.allocationByCountry.length > 0 ? (
+                <div className="space-y-5">
+                  <div>
+                    <p
+                      className="mb-2 text-[11px] font-semibold uppercase tracking-wider"
+                      style={{ color: 'var(--text-subtle)' }}
+                    >
+                      By country
+                    </p>
+                    <AllocationBar slices={result.allocationByCountry} />
+                  </div>
+                  <div>
+                    <p
+                      className="mb-2 text-[11px] font-semibold uppercase tracking-wider"
+                      style={{ color: 'var(--text-subtle)' }}
+                    >
+                      By city
+                    </p>
+                    <AllocationBar slices={result.allocationByCity} />
+                  </div>
+                </div>
               ) : (
-                <EmptyState title="No geography tags set" />
+                <EmptyState title="No locations set" />
               )}
             </Card>
           </div>
+
+          {result.allocationByProperty.length > 0 && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card title="Property exposure" subtitle="Share of real-estate equity by holding.">
+                <AllocationBar slices={result.allocationByProperty} />
+              </Card>
+              <Card title="Strategy exposure" subtitle="Real-estate equity by letting strategy.">
+                {result.allocationByStrategy.length > 0 ? (
+                  <AllocationBar slices={result.allocationByStrategy} />
+                ) : (
+                  <EmptyState title="No letting strategies set" />
+                )}
+              </Card>
+            </div>
+          )}
 
           <Card title="Position" subtitle="Each dimension on its own terms — no composite score.">
             <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
@@ -222,7 +256,8 @@ export function PortfolioBuilder() {
               <Th align="right">Income yield</Th>
               <Th align="right">Growth</Th>
               <Th align="right">Downside</Th>
-              <Th>Geography</Th>
+              <Th>Country</Th>
+              <Th>City</Th>
               <Th align="center">Liquid</Th>
               <Th />
             </tr>
@@ -314,11 +349,40 @@ export function PortfolioBuilder() {
                   </Td>
                   <Td>
                     <input
-                      className="w-24 rounded border bg-transparent px-1.5 py-1 text-sm"
+                      className="w-20 rounded border bg-transparent px-1.5 py-1 text-sm"
                       style={{ borderColor: 'var(--border)' }}
-                      value={asset.geography}
-                      placeholder="—"
-                      onChange={(e) => patch({ geography: e.target.value })}
+                      value={asset.location?.country ?? ''}
+                      placeholder="Country"
+                      onChange={(e) =>
+                        patch({
+                          location: {
+                            country: e.target.value,
+                            region: asset.location?.region ?? null,
+                            city: asset.location?.city ?? null,
+                            neighborhood: asset.location?.neighborhood ?? null,
+                            level: 'CITY',
+                          },
+                        })
+                      }
+                    />
+                  </Td>
+                  <Td>
+                    <input
+                      className="w-20 rounded border bg-transparent px-1.5 py-1 text-sm"
+                      style={{ borderColor: 'var(--border)' }}
+                      value={asset.location?.city ?? ''}
+                      placeholder="City"
+                      onChange={(e) =>
+                        patch({
+                          location: {
+                            country: asset.location?.country ?? '',
+                            region: asset.location?.region ?? null,
+                            city: e.target.value,
+                            neighborhood: asset.location?.neighborhood ?? null,
+                            level: 'CITY',
+                          },
+                        })
+                      }
                     />
                   </Td>
                   <Td align="center">
@@ -366,7 +430,8 @@ export function PortfolioBuilder() {
                     amount: roundMoney(price * (1 - ltv)),
                     debt: roundMoney(price * ltv),
                     liquid: false,
-                    geography: property.inputs.facts.city,
+                    location: property.inputs.facts.location,
+                    strategy: property.inputs.rental.strategy,
                     propertyId: property.id,
                   });
                 }}

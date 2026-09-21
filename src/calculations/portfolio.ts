@@ -7,7 +7,8 @@
  * false ranking. Each dimension is reported on its own terms.
  */
 
-import type { AssetClass, Portfolio, PortfolioAsset } from '@/domain/types';
+import type { AssetClass, Portfolio, PortfolioAsset, RentalStrategy } from '@/domain/types';
+import { RENTAL_STRATEGY_LABELS } from '@/domain/types';
 import { divide, isFiniteNumber, sumOptional } from './finance';
 
 export interface AllocationSlice {
@@ -19,35 +20,33 @@ export interface AllocationSlice {
 }
 
 export interface PortfolioResult {
-  /** Equity committed across all assets. */
   totalInvested: number;
-  /** Capital not yet allocated to any asset. */
   unallocatedCapital: number;
   availableCapital: number;
-  /** Debt attached to assets. */
   totalDebt: number;
   /** Equity + debt: the gross value of assets controlled. */
   grossAssetValue: number;
 
   allocationByClass: AllocationSlice[];
-  allocationByGeography: AllocationSlice[];
+  allocationByCountry: AllocationSlice[];
+  allocationByCity: AllocationSlice[];
+  /** Each individual holding's share — the property-level exposure. */
+  allocationByProperty: AllocationSlice[];
+  /** Real estate equity split by letting strategy. */
+  allocationByStrategy: AllocationSlice[];
 
-  /** Equity held in assets that cannot be liquidated quickly. */
   illiquidCapital: number;
   liquidCapital: number;
   liquidityRatio: number | null;
 
   /** Gross asset value / equity. 1.0 = unlevered. */
   leverageRatio: number | null;
-  /** Total debt / gross asset value. */
   loanToValue: number | null;
 
   expectedAnnualIncome: number | null;
   expectedAnnualGrowth: number | null;
-  /** Income net of interest on attached debt. */
   expectedNetCashFlow: number | null;
 
-  /** Share of the largest single holding. A plain descriptive statistic. */
   largestHoldingShare: number | null;
   largestHoldingLabel: string | null;
   /**
@@ -61,11 +60,8 @@ export interface PortfolioResult {
 }
 
 export interface PortfolioDownside {
-  /** Gross asset value after each asset's shock is applied. */
   shockedAssetValue: number;
-  /** Equity left after debt is repaid out of the shocked value. */
   shockedEquity: number;
-  /** Change in equity versus today, decimal. */
   equityChange: number | null;
   /** True where debt exceeds the shocked value of the assets securing it. */
   negativeEquity: boolean;
@@ -85,20 +81,30 @@ export const ASSET_CLASS_LABELS: Record<AssetClass, string> = {
  */
 export const DEFAULT_PORTFOLIO_DEBT_RATE = 0.035;
 
+const UNSPECIFIED = 'Unspecified';
+
 function groupShares(
   assets: PortfolioAsset[],
-  keyOf: (a: PortfolioAsset) => string,
+  keyOf: (a: PortfolioAsset) => string | null,
   labelOf: (a: PortfolioAsset) => string,
   total: number,
+  { skipNull = false }: { skipNull?: boolean } = {},
 ): AllocationSlice[] {
   const groups = new Map<string, AllocationSlice>();
   for (const asset of assets) {
-    const key = keyOf(asset);
+    const raw = keyOf(asset);
+    if (skipNull && raw === null) continue;
+    const key = raw ?? UNSPECIFIED;
     const existing = groups.get(key);
     if (existing) {
       existing.amount += asset.amount;
     } else {
-      groups.set(key, { key, label: labelOf(asset), amount: asset.amount, share: null });
+      groups.set(key, {
+        key,
+        label: raw === null ? UNSPECIFIED : labelOf(asset),
+        amount: asset.amount,
+        share: null,
+      });
     }
   }
   const slices = [...groups.values()];
@@ -147,6 +153,9 @@ export function analyzePortfolio(
       ? assets.reduce((acc, a) => acc + Math.pow(a.amount / totalInvested, 2), 0)
       : null;
 
+  const realEstate = assets.filter((a) => a.assetClass === 'REAL_ESTATE');
+  const realEstateEquity = sumOptional(realEstate.map((a) => a.amount));
+
   /* --- Downside ------------------------------------------------------- */
   let shockedAssetValue = 0;
   let negativeEquity = false;
@@ -171,11 +180,29 @@ export function analyzePortfolio(
       (a) => ASSET_CLASS_LABELS[a.assetClass],
       totalInvested,
     ),
-    allocationByGeography: groupShares(
+    allocationByCountry: groupShares(
       assets,
-      (a) => a.geography || 'Unspecified',
-      (a) => a.geography || 'Unspecified',
+      (a) => a.location?.country || null,
+      (a) => a.location?.country ?? UNSPECIFIED,
       totalInvested,
+    ),
+    allocationByCity: groupShares(
+      assets,
+      (a) => a.location?.city || null,
+      (a) => a.location?.city ?? UNSPECIFIED,
+      totalInvested,
+    ),
+    allocationByProperty: groupShares(
+      realEstate,
+      (a) => a.id,
+      (a) => a.label,
+      realEstateEquity,
+    ),
+    allocationByStrategy: groupShares(
+      realEstate,
+      (a) => a.strategy,
+      (a) => (a.strategy ? RENTAL_STRATEGY_LABELS[a.strategy as RentalStrategy] : UNSPECIFIED),
+      realEstateEquity,
     ),
     illiquidCapital,
     liquidCapital,

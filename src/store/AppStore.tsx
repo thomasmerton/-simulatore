@@ -16,18 +16,30 @@ import {
   type ReactNode,
 } from 'react';
 import type {
+  AllocationStrategy,
   Market,
   Portfolio,
   PortfolioAsset,
   Property,
   PropertyInputs,
   Scenario,
+  TaxProfile,
 } from '@/domain/types';
 import type { Provenance, ProvenanceMap } from '@/domain/provenance';
-import { emptyPortfolio, starterPropertyInputs, starterProvenance } from '@/domain/defaults';
+import {
+  blankTaxProfile,
+  emptyAllocationStrategy,
+  emptyPortfolio,
+  italianSecondHomeProfile,
+  starterPropertyInputs,
+  starterProvenance,
+} from '@/domain/defaults';
+import { applyTaxProfile, TAX_PROFILE_PATHS } from '@/calculations/tax';
 import { exampleProperty, isUntouched } from '@/data/exampleProperty';
-import { defaultScenarios } from '@/calculations/scenario';
+import { NO_SHOCKS, defaultScenarios } from '@/calculations/scenario';
 import { LocalStorageRepository, newId, type Repository } from './repository';
+
+export { blankTaxProfile };
 
 export type ThemeMode = 'light' | 'dark';
 
@@ -36,6 +48,8 @@ interface AppState {
   markets: Market[];
   scenarios: Scenario[];
   portfolio: Portfolio;
+  taxProfiles: TaxProfile[];
+  allocationStrategies: AllocationStrategy[];
   activePropertyId: string | null;
   loaded: boolean;
 }
@@ -45,6 +59,8 @@ interface AppActions {
   createProperty(name?: string): Property;
   /** Load the clearly-labelled illustrative property. Explicit action only. */
   loadExampleProperty(): void;
+  /** Create a property from a hand-transcribed listing. */
+  importDeal(draft: DealDraft): Property;
   updatePropertyInputs(id: string, inputs: PropertyInputs, touched: string[]): void;
   renameProperty(id: string, name: string): void;
   deleteProperty(id: string): void;
@@ -58,6 +74,14 @@ interface AppActions {
   addScenario(): void;
   deleteScenario(id: string): void;
   resetScenarios(): void;
+
+  upsertTaxProfile(profile: TaxProfile): void;
+  deleteTaxProfile(id: string): void;
+  applyTaxProfileToProperty(propertyId: string, profileId: string): void;
+
+  addAllocationStrategy(name?: string): void;
+  updateAllocationStrategy(strategy: AllocationStrategy): void;
+  deleteAllocationStrategy(id: string): void;
 
   setAvailableCapital(amount: number): void;
   addPortfolioAsset(asset?: Partial<PortfolioAsset>): void;
@@ -88,12 +112,33 @@ function initialTheme(): ThemeMode {
   return 'light';
 }
 
+/** The minimum a listing must give before it can be analysed. */
+export interface DealDraft {
+  name: string;
+  listingUrl: string;
+  country: string;
+  region: string;
+  city: string;
+  neighborhood: string;
+  address: string;
+  propertyType: Property['inputs']['facts']['propertyType'];
+  askingPrice: number | null;
+  sqm: number | null;
+  rooms: number | null;
+  bathrooms: number | null;
+  floor: number | null;
+  condition: Property['inputs']['facts']['condition'];
+  monthlyRent: number | null;
+  strategy: Property['inputs']['rental']['strategy'];
+}
+
 function newProperty(name: string): Property {
   const now = new Date().toISOString();
   return {
     id: newId(),
     name,
     marketId: null,
+    taxProfileId: null,
     createdAt: now,
     updatedAt: now,
     inputs: starterPropertyInputs(),
@@ -120,6 +165,8 @@ export function AppProvider({
   const [markets, setMarkets] = useState<Market[]>([]);
   const [scenarios, setScenarios] = useState<Scenario[]>(defaultScenarios());
   const [portfolio, setPortfolio] = useState<Portfolio>(() => emptyPortfolio(newId()));
+  const [taxProfiles, setTaxProfiles] = useState<TaxProfile[]>([]);
+  const [allocationStrategies, setAllocationStrategies] = useState<AllocationStrategy[]>([]);
   const [activePropertyId, setActivePropertyId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(initialTheme);
@@ -128,13 +175,21 @@ export function AppProvider({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [storedProperties, storedMarkets, storedScenarios, storedPortfolio] =
-        await Promise.all([
-          repository.listProperties(),
-          repository.listMarkets(),
-          repository.listScenarios(),
-          repository.getPortfolio(),
-        ]);
+      const [
+        storedProperties,
+        storedMarkets,
+        storedScenarios,
+        storedPortfolio,
+        storedTaxProfiles,
+        storedAllocations,
+      ] = await Promise.all([
+        repository.listProperties(),
+        repository.listMarkets(),
+        repository.listScenarios(),
+        repository.getPortfolio(),
+        repository.listTaxProfiles(),
+        repository.listAllocationStrategies(),
+      ]);
       if (cancelled) return;
 
       const initialProperties =
@@ -144,6 +199,12 @@ export function AppProvider({
       setMarkets(storedMarkets);
       setScenarios(storedScenarios.length > 0 ? storedScenarios : defaultScenarios());
       setPortfolio(storedPortfolio ?? emptyPortfolio(newId()));
+      // One unverified starting profile, so the tax layer is discoverable.
+      // It is explicitly marked unverified; nothing is applied automatically.
+      setTaxProfiles(
+        storedTaxProfiles.length > 0 ? storedTaxProfiles : [italianSecondHomeProfile(newId())],
+      );
+      setAllocationStrategies(storedAllocations);
       setLoaded(true);
     })();
     return () => {
@@ -188,6 +249,70 @@ export function AppProvider({
     setActivePropertyId(example.id);
     persistProperty(example);
   }, [persistProperty]);
+
+  /**
+   * Import a hand-transcribed listing.
+   *
+   * Everything the user typed is USER_INPUT — they are the source, having read
+   * it off the listing. Anything they left blank stays MISSING rather than
+   * being filled from the structural defaults, so the gaps stay visible.
+   */
+  const importDeal = useCallback(
+    (draft: DealDraft) => {
+      const base = newProperty(draft.name || 'Imported deal');
+      const provenance: ProvenanceMap = { ...base.provenance };
+      const mark = (path: string, present: boolean) => {
+        provenance[path] = present ? 'USER_INPUT' : 'MISSING';
+      };
+      mark('facts.location', Boolean(draft.country || draft.city));
+      mark('facts.purchasePrice', draft.askingPrice !== null);
+      mark('facts.sqm', draft.sqm !== null);
+      mark('rental.monthlyRent', draft.monthlyRent !== null);
+      mark('facts.condition', draft.condition !== null);
+      mark('facts.propertyType', draft.propertyType !== null);
+
+      const property: Property = {
+        ...base,
+        inputs: {
+          ...base.inputs,
+          facts: {
+            ...base.inputs.facts,
+            location: {
+              country: draft.country,
+              region: draft.region || null,
+              city: draft.city || null,
+              neighborhood: draft.neighborhood || null,
+              level: draft.neighborhood ? 'NEIGHBORHOOD' : 'CITY',
+            },
+            address: draft.address || null,
+            listingUrl: draft.listingUrl || null,
+            propertyType: draft.propertyType,
+            askingPrice: draft.askingPrice,
+            // The asking price is the starting assumption for what is paid,
+            // until the user records a negotiated figure.
+            purchasePrice: draft.askingPrice,
+            sqm: draft.sqm,
+            rooms: draft.rooms,
+            bathrooms: draft.bathrooms,
+            floor: draft.floor,
+            condition: draft.condition,
+          },
+          rental: {
+            ...base.inputs.rental,
+            strategy: draft.strategy,
+            monthlyRent: draft.monthlyRent,
+          },
+        },
+        provenance,
+      };
+
+      setProperties((prev) => [...prev.filter((p) => !isUntouched(p)), property]);
+      setActivePropertyId(property.id);
+      persistProperty(property);
+      return property;
+    },
+    [persistProperty],
+  );
 
   const updatePropertyInputs = useCallback(
     (id: string, inputs: PropertyInputs, touched: string[]) => {
@@ -312,16 +437,7 @@ export function AppProvider({
           name: `Scenario ${prev.length + 1}`,
           builtIn: false,
           description: '',
-          shocks: {
-            purchasePriceDelta: 0,
-            marketValueDelta: 0,
-            rentDelta: 0,
-            vacancyDelta: 0,
-            operatingCostDelta: 0,
-            interestRateDelta: 0,
-            priceGrowthDelta: 0,
-            rentGrowthDelta: 0,
-          },
+          shocks: { ...NO_SHOCKS },
         },
       ]),
     );
@@ -337,6 +453,102 @@ export function AppProvider({
   const resetScenarios = useCallback(() => {
     setScenarios(persistScenarios(defaultScenarios()));
   }, [persistScenarios]);
+
+  /* --- Tax profile actions -------------------------------------------- */
+  const upsertTaxProfile = useCallback(
+    (profile: TaxProfile) => {
+      setTaxProfiles((prev) => {
+        const next = prev.some((p) => p.id === profile.id)
+          ? prev.map((p) => (p.id === profile.id ? profile : p))
+          : [...prev, profile];
+        void repository.saveTaxProfiles(next);
+        return next;
+      });
+    },
+    [repository],
+  );
+
+  const deleteTaxProfile = useCallback(
+    (id: string) => {
+      setTaxProfiles((prev) => {
+        const next = prev.filter((p) => p.id !== id);
+        void repository.saveTaxProfiles(next);
+        return next;
+      });
+    },
+    [repository],
+  );
+
+  /**
+   * Applying a profile overwrites the property's tax inputs and marks them
+   * according to whether the profile has been verified. An unverified profile
+   * yields MODEL_ASSUMPTION, however precise its rates look.
+   */
+  const applyTaxProfileToProperty = useCallback(
+    (propertyId: string, profileId: string) => {
+      setTaxProfiles((profiles) => {
+        const profile = profiles.find((p) => p.id === profileId);
+        if (!profile) return profiles;
+        setProperties((prev) =>
+          prev.map((property) => {
+            if (property.id !== propertyId) return property;
+            const provenance = { ...property.provenance };
+            for (const path of TAX_PROFILE_PATHS) {
+              provenance[path] = profile.verified ? 'RAW_DATA' : 'MODEL_ASSUMPTION';
+            }
+            const next: Property = {
+              ...property,
+              taxProfileId: profile.id,
+              inputs: applyTaxProfile(property.inputs, profile),
+              provenance,
+              updatedAt: new Date().toISOString(),
+            };
+            persistProperty(next);
+            return next;
+          }),
+        );
+        return profiles;
+      });
+    },
+    [persistProperty],
+  );
+
+  /* --- Allocation strategy actions ------------------------------------- */
+  const persistAllocations = useCallback(
+    (next: AllocationStrategy[]) => {
+      void repository.saveAllocationStrategies(next);
+      return next;
+    },
+    [repository],
+  );
+
+  const addAllocationStrategy = useCallback(
+    (name?: string) => {
+      setAllocationStrategies((prev) =>
+        persistAllocations([
+          ...prev,
+          emptyAllocationStrategy(newId(), name ?? `Strategy ${String.fromCharCode(65 + prev.length)}`),
+        ]),
+      );
+    },
+    [persistAllocations],
+  );
+
+  const updateAllocationStrategy = useCallback(
+    (strategy: AllocationStrategy) => {
+      setAllocationStrategies((prev) =>
+        persistAllocations(prev.map((s) => (s.id === strategy.id ? strategy : s))),
+      );
+    },
+    [persistAllocations],
+  );
+
+  const deleteAllocationStrategy = useCallback(
+    (id: string) => {
+      setAllocationStrategies((prev) => persistAllocations(prev.filter((s) => s.id !== id)));
+    },
+    [persistAllocations],
+  );
 
   /* --- Portfolio actions --------------------------------------------- */
   const mutatePortfolio = useCallback(
@@ -370,7 +582,8 @@ export function AppProvider({
             incomeYield: null,
             growthRate: null,
             liquid: true,
-            geography: '',
+            location: null,
+            strategy: null,
             propertyId: null,
             downsideShock: null,
             ...asset,
@@ -405,6 +618,8 @@ export function AppProvider({
     markets,
     scenarios,
     portfolio,
+    taxProfiles,
+    allocationStrategies,
     activePropertyId,
     activeProperty,
     loaded,
@@ -413,6 +628,7 @@ export function AppProvider({
     setActiveProperty: setActivePropertyId,
     createProperty,
     loadExampleProperty,
+    importDeal,
     updatePropertyInputs,
     renameProperty,
     deleteProperty,
@@ -424,6 +640,12 @@ export function AppProvider({
     addScenario,
     deleteScenario,
     resetScenarios,
+    upsertTaxProfile,
+    deleteTaxProfile,
+    applyTaxProfileToProperty,
+    addAllocationStrategy,
+    updateAllocationStrategy,
+    deleteAllocationStrategy,
     setAvailableCapital,
     addPortfolioAsset,
     updatePortfolioAsset,

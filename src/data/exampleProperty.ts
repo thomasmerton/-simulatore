@@ -25,8 +25,14 @@ function exampleInputs(): PropertyInputs {
     ...base,
     facts: {
       ...base.facts,
-      city: 'Milan',
-      district: 'Navigli',
+      location: {
+        country: 'Italy',
+        region: 'Lombardia',
+        city: 'Milan',
+        neighborhood: 'Navigli',
+        level: 'NEIGHBORHOOD',
+      },
+      propertyType: 'APARTMENT',
       askingPrice: 189_000,
       purchasePrice: 180_000,
       sqm: 65,
@@ -40,8 +46,13 @@ function exampleInputs(): PropertyInputs {
     },
     acquisition: {
       ...base.acquisition,
+      purchaseTaxRate: 0.09,
+      agencyCommissionRate: 0.03,
       renovationCost: 12_000,
       furnitureCost: 4_000,
+      legalFees: 0,
+      financingFees: 1_200,
+      initialReserves: 3_000,
     },
     rental: {
       ...base.rental,
@@ -57,7 +68,14 @@ function exampleInputs(): PropertyInputs {
       managementFeeRate: 0.08,
     },
     financing: { ...base.financing, enabled: true, ltv: 0.7, annualRate: 0.035 },
-    exit: { ...base.exit, priceGrowthRate: 0.015 },
+    incomeTax: { mode: 'FLAT_ON_GROSS', rate: 0.21, interestDeductible: false },
+    exit: {
+      ...base.exit,
+      priceGrowthRate: 0.015,
+      sellingCostsRate: 0.03,
+      capitalGainsTaxRate: 0.26,
+      capitalGainsExemptAfterYears: 5,
+    },
   };
 }
 
@@ -67,7 +85,7 @@ function exampleInputs(): PropertyInputs {
  */
 function exampleProvenance(): ProvenanceMap {
   const paths = [
-    'facts.city', 'facts.district', 'facts.askingPrice', 'facts.purchasePrice',
+    'facts.location', 'facts.askingPrice', 'facts.purchasePrice', 'facts.propertyType',
     'facts.sqm', 'facts.rooms', 'facts.bathrooms', 'facts.floor',
     'facts.condition', 'facts.yearBuilt',
     'acquisition.purchaseTaxRate', 'acquisition.notaryFees',
@@ -77,7 +95,10 @@ function exampleProvenance(): ProvenanceMap {
     'rental.stabilizationMonths', 'rental.condoFees', 'rental.propertyTax',
     'rental.insurance', 'rental.ordinaryMaintenance', 'rental.capexReserve',
     'rental.managementFeeRate', 'rental.expenseGrowthRate',
+    'acquisition.legalFees', 'acquisition.financingFees', 'acquisition.initialReserves',
+    'rental.utilities',
     'financing.ltv', 'financing.annualRate', 'financing.termYears',
+    'incomeTax.mode', 'incomeTax.rate',
     'exit.priceGrowthRate', 'exit.sellingCostsRate',
     'exit.capitalGainsTaxRate', 'exit.capitalGainsExemptAfterYears',
     'settings.discountRate',
@@ -93,6 +114,7 @@ export function exampleProperty(id: string): Property {
     id,
     name: EXAMPLE_PROPERTY_NAME,
     marketId: null,
+    taxProfileId: null,
     createdAt: now,
     updatedAt: now,
     inputs: exampleInputs(),

@@ -1,39 +1,65 @@
 /**
- * App shell: navigation, property switcher and theme toggle.
+ * App shell.
+ *
+ * The navigation encodes the three levels the product is organised around:
+ *
+ *   OVERVIEW     "what is the picture?"        — the headline numbers.
+ *   ANALYSIS     "why are they what they are?" — the waterfall, scenarios,
+ *                                                sensitivity, comparison.
+ *   ASSUMPTIONS  "where do they come from?"    — inputs, provenance, tax,
+ *                                                data-quality warnings.
+ *
+ * A reader can always get from a number to the assumption behind it.
  */
 
 import { useState } from 'react';
 import { AppProvider, useApp } from '@/store/AppStore';
 import { Dashboard } from '@/ui/pages/Dashboard';
 import { PropertyAnalyzer } from '@/ui/pages/PropertyAnalyzer';
-import { HoldingPeriod } from '@/ui/pages/HoldingPeriod';
+import { Underwriting } from '@/ui/pages/Underwriting';
 import { Scenarios } from '@/ui/pages/Scenarios';
 import { Sensitivity } from '@/ui/pages/Sensitivity';
-import { Compare } from '@/ui/pages/Compare';
+import { Deals } from '@/ui/pages/Deals';
 import { Markets } from '@/ui/pages/Markets';
 import { PortfolioBuilder } from '@/ui/pages/PortfolioBuilder';
+import { Allocation } from '@/ui/pages/Allocation';
+import { AssumptionsRegister } from '@/ui/pages/AssumptionsRegister';
 import { Button, Card, EmptyState } from '@/ui/components/primitives';
 
 type Tab =
-  | 'dashboard'
-  | 'property'
-  | 'holding'
+  | 'overview'
+  | 'underwriting'
   | 'scenarios'
   | 'sensitivity'
-  | 'compare'
+  | 'deals'
   | 'markets'
-  | 'portfolio';
+  | 'portfolio'
+  | 'allocation'
+  | 'inputs'
+  | 'assumptions';
 
-const TABS: { id: Tab; label: string; needsProperty: boolean }[] = [
-  { id: 'dashboard', label: 'Dashboard', needsProperty: true },
-  { id: 'property', label: 'Property', needsProperty: true },
-  { id: 'holding', label: 'Holding & exit', needsProperty: true },
-  { id: 'scenarios', label: 'Scenarios', needsProperty: true },
-  { id: 'sensitivity', label: 'Sensitivity', needsProperty: true },
-  { id: 'compare', label: 'Compare', needsProperty: false },
-  { id: 'markets', label: 'Markets', needsProperty: false },
-  { id: 'portfolio', label: 'Portfolio', needsProperty: false },
+type Level = 'OVERVIEW' | 'ANALYSIS' | 'ASSUMPTIONS';
+
+const TABS: { id: Tab; label: string; level: Level; needsProperty: boolean }[] = [
+  { id: 'overview', label: 'Overview', level: 'OVERVIEW', needsProperty: true },
+  { id: 'underwriting', label: 'Underwriting', level: 'ANALYSIS', needsProperty: true },
+  { id: 'scenarios', label: 'Scenarios', level: 'ANALYSIS', needsProperty: true },
+  { id: 'sensitivity', label: 'Sensitivity', level: 'ANALYSIS', needsProperty: true },
+  { id: 'deals', label: 'Deals', level: 'ANALYSIS', needsProperty: false },
+  { id: 'markets', label: 'Markets', level: 'ANALYSIS', needsProperty: false },
+  { id: 'portfolio', label: 'Portfolio', level: 'ANALYSIS', needsProperty: false },
+  { id: 'allocation', label: 'Capital allocation', level: 'ANALYSIS', needsProperty: false },
+  { id: 'inputs', label: 'Inputs', level: 'ASSUMPTIONS', needsProperty: true },
+  { id: 'assumptions', label: 'Assumptions & tax', level: 'ASSUMPTIONS', needsProperty: true },
 ];
+
+const LEVEL_LABELS: Record<Level, string> = {
+  OVERVIEW: 'Overview',
+  ANALYSIS: 'Analysis',
+  ASSUMPTIONS: 'Assumptions',
+};
+
+const LEVEL_ORDER: Level[] = ['OVERVIEW', 'ANALYSIS', 'ASSUMPTIONS'];
 
 function Shell() {
   const {
@@ -47,10 +73,9 @@ function Shell() {
     toggleTheme,
     loaded,
   } = useApp();
-  const [tab, setTabState] = useState<Tab>('dashboard');
+  const [tab, setTabState] = useState<Tab>('overview');
 
-  /* Switching tab is a change of view, so it starts at the top rather than
-     inheriting the previous tab's scroll position. */
+  /* Switching tab is a change of view, so it starts at the top. */
   const setTab = (next: Tab) => {
     setTabState(next);
     window.scrollTo({ top: 0 });
@@ -58,7 +83,10 @@ function Shell() {
 
   if (!loaded) {
     return (
-      <div className="flex h-full items-center justify-center text-sm" style={{ color: 'var(--text-muted)' }}>
+      <div
+        className="flex h-full items-center justify-center text-sm"
+        style={{ color: 'var(--text-muted)' }}
+      >
         Loading…
       </div>
     );
@@ -67,10 +95,13 @@ function Shell() {
   return (
     <div className="min-h-full">
       <header
-        className="sticky top-0 z-30 border-b backdrop-blur"
-        style={{ background: 'color-mix(in oklab, var(--bg) 88%, transparent)' }}
+        className="sticky z-30 border-b backdrop-blur"
+        style={{
+          top: 'env(safe-area-inset-top, 0px)',
+          background: 'color-mix(in oklab, var(--bg) 88%, transparent)',
+        }}
       >
-        <div className="mx-auto max-w-[110rem] px-4 sm:px-6">
+        <div className="mx-auto max-w-[115rem] px-4 sm:px-6">
           <div className="flex h-14 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <span className="whitespace-nowrap text-sm font-semibold tracking-tight">
@@ -127,26 +158,36 @@ function Shell() {
             </div>
           </div>
 
-          <nav className="-mx-1 flex gap-1 overflow-x-auto pb-2">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors"
-                style={{
-                  background: tab === t.id ? 'var(--accent-soft)' : 'transparent',
-                  color: tab === t.id ? 'var(--accent)' : 'var(--text-muted)',
-                }}
-              >
-                {t.label}
-              </button>
+          <nav className="-mx-1 flex items-center gap-3 overflow-x-auto pb-2">
+            {LEVEL_ORDER.map((level) => (
+              <div key={level} className="flex shrink-0 items-center gap-1">
+                <span
+                  className="whitespace-nowrap px-1 text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: 'var(--text-subtle)' }}
+                >
+                  {LEVEL_LABELS[level]}
+                </span>
+                {TABS.filter((t) => t.level === level).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    className="whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors"
+                    style={{
+                      background: tab === t.id ? 'var(--accent-soft)' : 'transparent',
+                      color: tab === t.id ? 'var(--accent)' : 'var(--text-muted)',
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             ))}
           </nav>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[110rem] px-4 py-5 sm:px-6">
+      <main className="mx-auto max-w-[115rem] px-4 py-5 sm:px-6">
         {(() => {
           const spec = TABS.find((t) => t.id === tab);
           if (spec?.needsProperty && !activeProperty) {
@@ -159,22 +200,26 @@ function Shell() {
             );
           }
           switch (tab) {
-            case 'dashboard':
+            case 'overview':
               return <Dashboard property={activeProperty!} />;
-            case 'property':
-              return <PropertyAnalyzer property={activeProperty!} />;
-            case 'holding':
-              return <HoldingPeriod property={activeProperty!} />;
+            case 'underwriting':
+              return <Underwriting property={activeProperty!} />;
             case 'scenarios':
               return <Scenarios property={activeProperty!} />;
             case 'sensitivity':
               return <Sensitivity property={activeProperty!} />;
-            case 'compare':
-              return <Compare />;
+            case 'deals':
+              return <Deals />;
             case 'markets':
               return <Markets />;
             case 'portfolio':
               return <PortfolioBuilder />;
+            case 'allocation':
+              return <Allocation />;
+            case 'inputs':
+              return <PropertyAnalyzer property={activeProperty!} />;
+            case 'assumptions':
+              return <AssumptionsRegister property={activeProperty!} />;
           }
         })()}
 
@@ -186,7 +231,8 @@ function Shell() {
             This tool computes the consequences of the assumptions you enter. It does not rank
             properties or markets, does not score investments, and does not tell you what to buy.
             Where an input is missing it reports the result as unavailable rather than substituting
-            a plausible number. Figures are not financial advice.
+            a plausible number. Tax treatment is an editable input, not encoded law. Figures are
+            not financial or tax advice.
           </p>
         </footer>
       </main>

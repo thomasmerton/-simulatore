@@ -26,9 +26,9 @@
 
   /* Provenance palette. Distinguishable without relying on hue alone: each
      badge also carries a distinct label. */
-  --prov-verified: #167a5b;
+  --prov-raw: #167a5b;
   --prov-user: #2f6fdd;
-  --prov-estimated: #9a6207;
+  --prov-derived: #9a6207;
   --prov-assumption: #7c5cbf;
   --prov-missing: #8a93a3;
 
@@ -74,9 +74,9 @@
   --warning: #e0a33c;
   --warning-soft: #2c2415;
 
-  --prov-verified: #4cc79b;
+  --prov-raw: #4cc79b;
   --prov-user: #6aa0f5;
-  --prov-estimated: #e0a33c;
+  --prov-derived: #e0a33c;
   --prov-assumption: #b39bec;
   --prov-missing: #737d8d;
 

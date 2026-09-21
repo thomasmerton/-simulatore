@@ -43,8 +43,8 @@ export function Compare() {
   /** Rows are fixed and identical for every property: that is what makes it a comparison. */
   const rows: { label: string; render: (a: (typeof analyses)[number]) => string; muted?: boolean }[] =
     [
-      { label: 'City', render: (a) => a.property.inputs.facts.city || '—', muted: true },
-      { label: 'District', render: (a) => a.property.inputs.facts.district || '—', muted: true },
+      { label: 'City', render: (a) => a.property.inputs.facts.location.city || '—', muted: true },
+      { label: 'Neighbourhood', render: (a) => a.property.inputs.facts.location.neighborhood || '—', muted: true },
       {
         label: 'Purchase price',
         render: (a) => formatCurrency(a.result.acquisition.purchasePrice, currency),

@@ -13,7 +13,7 @@ function baseInputs(): PropertyInputs {
   const i = emptyPropertyInputs();
   return {
     ...i,
-    facts: { ...i.facts, city: 'Testville', purchasePrice: 200_000, sqm: 80 },
+    facts: { ...i.facts, location: { ...i.facts.location, country: 'Testland', city: 'Testville' }, purchasePrice: 200_000, sqm: 80 },
     acquisition: {
       ...i.acquisition,
       purchaseTaxRate: 0.09,
@@ -60,7 +60,7 @@ describe('runProjection - unlevered base case', () => {
   });
 
   it('computes NOI as rent less operating expenses', () => {
-    expect(r.year1.grossPotentialRent).toBe(12_000);
+    expect(r.year1.grossScheduledRevenue).toBe(12_000);
     expect(r.year1.noi).toBeCloseTo(10_800, 6);
   });
 
@@ -155,16 +155,17 @@ describe('runProjection - leverage', () => {
       annualRate: 0.03,
       termYears: 25,
       rateType: 'FIXED',
-      upfrontCosts: 1_000,
+      amortizationType: 'AMORTIZING',
+      maturityYears: null,
     };
     return runProjection(inputs);
   }
 
-  it('reduces the equity cheque by the loan and adds arrangement fees', () => {
+  it('reduces the equity cheque by the loan', () => {
     const r = levered();
     expect(r.loanAmount).toBeCloseTo(140_000, 6);
-    // 220,000 total cost - 140,000 loan + 1,000 fees
-    expect(r.equityInvested).toBeCloseTo(81_000, 6);
+    // 220,000 total cost - 140,000 loan
+    expect(r.equityInvested).toBeCloseTo(80_000, 6);
   });
 
   it('leaves NOI and net yield untouched: they are property-level metrics', () => {
@@ -305,8 +306,8 @@ describe('runProjection - stabilisation period', () => {
     inputs.rental.stabilizationMonths = 6;
     const withWorks = runProjection(inputs);
 
-    expect(withWorks.year1.grossPotentialRent).toBe(6_000);
-    expect(withWorks.years[1]?.rental.grossPotentialRent).toBe(12_000);
+    expect(withWorks.year1.grossScheduledRevenue).toBe(6_000);
+    expect(withWorks.years[1]?.rental.grossScheduledRevenue).toBe(12_000);
     expect(withWorks.leveredIRR.value as number).toBeLessThan(
       withoutWorks.leveredIRR.value as number,
     );

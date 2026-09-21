@@ -92,7 +92,7 @@ export function ProvenanceSummary({
     const p = provenance[path] ?? 'MISSING';
     counts.set(p, (counts.get(p) ?? 0) + 1);
   }
-  const order = ['VERIFIED', 'USER_INPUT', 'ESTIMATED', 'MODEL_ASSUMPTION', 'MISSING'] as const;
+  const order = ['RAW_DATA', 'USER_INPUT', 'DERIVED_DATA', 'MODEL_ASSUMPTION', 'MISSING'] as const;
 
   return (
     <div className="flex flex-wrap items-center gap-2">

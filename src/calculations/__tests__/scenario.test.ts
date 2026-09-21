@@ -8,7 +8,7 @@ function baseInputs(): PropertyInputs {
   const i = emptyPropertyInputs();
   return {
     ...i,
-    facts: { ...i.facts, city: 'Testville', purchasePrice: 200_000, sqm: 80 },
+    facts: { ...i.facts, location: { ...i.facts.location, country: 'Testland', city: 'Testville' }, purchasePrice: 200_000, sqm: 80 },
     acquisition: {
       ...i.acquisition,
       purchaseTaxRate: 0.09,
@@ -35,7 +35,8 @@ function baseInputs(): PropertyInputs {
       annualRate: 0.03,
       termYears: 25,
       rateType: 'VARIABLE',
-      upfrontCosts: 0,
+      amortizationType: 'AMORTIZING',
+      maturityYears: null,
     },
     exit: {
       holdingPeriodYears: 10,
@@ -67,11 +68,35 @@ describe('applyShocks', () => {
     const out = applyShocks(baseInputs(), {
       ...NO_SHOCKS,
       rentDelta: -0.1,
-      operatingCostDelta: 0.2,
+      maintenanceDelta: 0.2,
+      otherOperatingDelta: 0.2,
     });
     expect(out.rental.monthlyRent).toBeCloseTo(900, 8);
     expect(out.rental.condoFees).toBeCloseTo(1_440, 8);
     expect(out.rental.capexReserve).toBeCloseTo(720, 8);
+  });
+
+  it('routes each expense shock to exactly the inputs it names', () => {
+    // The maintenance shock must not touch condo fees, and vice versa:
+    // a shock that quietly moved neighbouring inputs would make a scenario
+    // impossible to reason about.
+    const maintenanceOnly = applyShocks(baseInputs(), { ...NO_SHOCKS, maintenanceDelta: 0.5 });
+    expect(maintenanceOnly.rental.capexReserve).toBeCloseTo(900, 8);
+    expect(maintenanceOnly.rental.condoFees).toBeCloseTo(1_200, 8);
+
+    const otherOnly = applyShocks(baseInputs(), { ...NO_SHOCKS, otherOperatingDelta: 0.5 });
+    expect(otherOnly.rental.condoFees).toBeCloseTo(1_800, 8);
+    expect(otherOnly.rental.capexReserve).toBeCloseTo(600, 8);
+  });
+
+  it('clamps rate shocks into [0, 1] rather than producing an impossible rate', () => {
+    const inputs = baseInputs();
+    inputs.rental.managementFeeRate = 0.08;
+    const out = applyShocks(inputs, { ...NO_SHOCKS, managementDelta: 50 });
+    expect(out.rental.managementFeeRate).toBe(1);
+
+    const floored = applyShocks(inputs, { ...NO_SHOCKS, managementDelta: -50 });
+    expect(floored.rental.managementFeeRate).toBe(0);
   });
 
   it('shifts growth rates additively', () => {
@@ -123,9 +148,23 @@ describe('shock direction', () => {
   });
 
   it('higher operating costs worsen NOI', () => {
-    const r = runScenario(baseInputs(), scenario('costs', { operatingCostDelta: 0.4 }));
+    const r = runScenario(
+      baseInputs(),
+      scenario('costs', { otherOperatingDelta: 0.4, propertyTaxDelta: 0.4 }),
+    );
     expect(r.projection.year1.noi as number).toBeLessThan(
       runProjection(baseInputs()).year1.noi as number,
+    );
+  });
+
+  it('a capex shock leaves NOI alone but worsens cash flow', () => {
+    // The reserve sits BELOW NOI by design, so a maintenance shock that only
+    // moves the reserve must not move NOI.
+    const base = runProjection(baseInputs());
+    const r = runScenario(baseInputs(), scenario('capex', { maintenanceDelta: 1 }));
+    expect(r.projection.year1.noi as number).toBeLessThanOrEqual(base.year1.noi as number);
+    expect(r.projection.year1.afterTaxCashFlow as number).toBeLessThan(
+      base.year1.afterTaxCashFlow as number,
     );
   });
 });

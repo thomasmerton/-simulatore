@@ -13,7 +13,7 @@ function baseInputs(): PropertyInputs {
   const i = emptyPropertyInputs();
   return {
     ...i,
-    facts: { ...i.facts, city: 'Testville', purchasePrice: 200_000, sqm: 80 },
+    facts: { ...i.facts, location: { ...i.facts.location, country: 'Testland', city: 'Testville' }, purchasePrice: 200_000, sqm: 80 },
     acquisition: {
       ...i.acquisition,
       purchaseTaxRate: 0.09,
@@ -40,7 +40,8 @@ function baseInputs(): PropertyInputs {
       annualRate: 0.03,
       termYears: 25,
       rateType: 'FIXED',
-      upfrontCosts: 0,
+      amortizationType: 'AMORTIZING',
+      maturityYears: null,
     },
     exit: {
       holdingPeriodYears: 10,

@@ -12,7 +12,8 @@ const asset = (over: Partial<PortfolioAsset> = {}): PortfolioAsset => ({
   incomeYield: null,
   growthRate: null,
   liquid: true,
-  geography: 'Italy',
+  location: { country: 'Italy', region: null, city: 'Rome', neighborhood: null, level: 'CITY' },
+  strategy: null,
   propertyId: null,
   downsideShock: null,
   ...over,
@@ -29,7 +30,7 @@ const portfolio = (assets: PortfolioAsset[], availableCapital = 500_000): Portfo
 
 describe('analyzePortfolio - allocation', () => {
   const p = portfolio([
-    asset({ label: 'Flat', assetClass: 'REAL_ESTATE', amount: 250_000, liquid: false, geography: 'Milan' }),
+    asset({ label: 'Flat', assetClass: 'REAL_ESTATE', amount: 250_000, liquid: false, location: { country: 'Italy', region: 'Lombardia', city: 'Milan', neighborhood: null, level: 'CITY' } }),
     asset({ label: 'ETF', assetClass: 'EQUITIES', amount: 100_000 }),
     asset({ label: 'BTP', assetClass: 'BONDS', amount: 100_000 }),
     asset({ label: 'Deposit', assetClass: 'CASH', amount: 50_000 }),
@@ -53,9 +54,15 @@ describe('analyzePortfolio - allocation', () => {
     expect(r.allocationByClass[0]!.key).toBe('REAL_ESTATE');
   });
 
-  it('groups exposure by geography', () => {
-    const milan = r.allocationByGeography.find((s) => s.key === 'Milan');
-    expect(milan?.amount).toBe(250_000);
+  it('groups exposure by city and by country', () => {
+    expect(r.allocationByCity.find((s) => s.key === 'Milan')?.amount).toBe(250_000);
+    expect(r.allocationByCountry.find((s) => s.key === 'Italy')?.amount).toBe(500_000);
+  });
+
+  it('reports property-level exposure within real estate only', () => {
+    expect(r.allocationByProperty).toHaveLength(1);
+    expect(r.allocationByProperty[0]!.label).toBe('Flat');
+    expect(r.allocationByProperty[0]!.share).toBeCloseTo(1, 10);
   });
 
   it('separates liquid from illiquid capital', () => {

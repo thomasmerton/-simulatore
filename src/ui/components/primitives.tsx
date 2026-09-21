@@ -73,9 +73,9 @@ export function SectionTitle({ children, hint }: { children: ReactNode; hint?: R
  * ------------------------------------------------------------------ */
 
 const TONE_VAR: Record<Provenance, string> = {
-  VERIFIED: 'var(--prov-verified)',
+  RAW_DATA: 'var(--prov-raw)',
   USER_INPUT: 'var(--prov-user)',
-  ESTIMATED: 'var(--prov-estimated)',
+  DERIVED_DATA: 'var(--prov-derived)',
   MODEL_ASSUMPTION: 'var(--prov-assumption)',
   MISSING: 'var(--prov-missing)',
 };
