@@ -25,6 +25,7 @@ import type {
 } from '@/domain/types';
 import type { Provenance, ProvenanceMap } from '@/domain/provenance';
 import { emptyPortfolio, starterPropertyInputs, starterProvenance } from '@/domain/defaults';
+import { exampleProperty, isUntouched } from '@/data/exampleProperty';
 import { defaultScenarios } from '@/calculations/scenario';
 import { LocalStorageRepository, newId, type Repository } from './repository';
 
@@ -42,6 +43,8 @@ interface AppState {
 interface AppActions {
   setActiveProperty(id: string | null): void;
   createProperty(name?: string): Property;
+  /** Load the clearly-labelled illustrative property. Explicit action only. */
+  loadExampleProperty(): void;
   updatePropertyInputs(id: string, inputs: PropertyInputs, touched: string[]): void;
   renameProperty(id: string, name: string): void;
   deleteProperty(id: string): void;
@@ -176,6 +179,15 @@ export function AppProvider({
     },
     [persistProperty],
   );
+
+  const loadExampleProperty = useCallback(() => {
+    const example = exampleProperty(newId());
+    // Drop any empty starter shells rather than leaving them in the switcher;
+    // anything the user has actually filled in is kept.
+    setProperties((prev) => [...prev.filter((p) => !isUntouched(p)), example]);
+    setActivePropertyId(example.id);
+    persistProperty(example);
+  }, [persistProperty]);
 
   const updatePropertyInputs = useCallback(
     (id: string, inputs: PropertyInputs, touched: string[]) => {
@@ -400,6 +412,7 @@ export function AppProvider({
     toggleTheme: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')),
     setActiveProperty: setActivePropertyId,
     createProperty,
+    loadExampleProperty,
     updatePropertyInputs,
     renameProperty,
     deleteProperty,

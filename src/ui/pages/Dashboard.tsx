@@ -13,7 +13,8 @@ import { runScenarios } from '@/calculations/scenario';
 import { analyzePortfolio } from '@/calculations/portfolio';
 import { SENSITIVITY_AXES } from '@/calculations/sensitivity';
 import { useApp } from '@/store/AppStore';
-import { Card, Notice, Stat, Table, Td, Th } from '../components/primitives';
+import { Button, Card, Notice, Stat, Table, Td, Th } from '../components/primitives';
+import { isUntouched } from '@/data/exampleProperty';
 import { AllocationBar, ScenarioBarChart } from '../charts/charts';
 import { BasedOn, CORE_INPUT_PATHS, ProvenanceSummary } from '../components/Assumptions';
 import {
@@ -24,7 +25,7 @@ import {
 } from '../format';
 
 export function Dashboard({ property }: { property: Property }) {
-  const { scenarios, portfolio, properties } = useApp();
+  const { scenarios, portfolio, properties, loadExampleProperty } = useApp();
   const { inputs, provenance } = property;
   const currency = inputs.settings.currency;
 
@@ -61,6 +62,19 @@ export function Dashboard({ property }: { property: Property }) {
 
   return (
     <div className="space-y-4">
+      {isUntouched(property) && (
+        <Notice title="Nothing to analyse yet.">
+          Enter a price and a rent on the <strong>Property</strong> tab, or load a worked example
+          to see every screen populated. The example is invented for demonstration — its figures
+          are labelled as model assumptions, not evidence.
+          <div className="mt-2">
+            <Button size="sm" variant="primary" onClick={loadExampleProperty}>
+              Load example property
+            </Button>
+          </div>
+        </Notice>
+      )}
+
       {/* ---------------- Headline ---------------- */}
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
